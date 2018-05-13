@@ -27,6 +27,9 @@
     <ClInclude Include="My_FTP.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="FTPConnection.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -35,10 +38,16 @@
     <ClCompile Include="My_FTP.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="FTPConnection.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="My_FTP.rc">
       <Filter>Resource Files</Filter>
     </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="ClassDiagram.cd" />
   </ItemGroup>
 </Project>
