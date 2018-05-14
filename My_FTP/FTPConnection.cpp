@@ -1,4 +1,4 @@
-#include "stdafx.h"
+﻿#include "stdafx.h"
 #include "FTPConnection.h"
 
 int getRelyCode(const char *relyMsg)
@@ -30,6 +30,15 @@ FTPConnection::~FTPConnection()
 	Close();
 }
 
+
+/*
+* Thiết lập kết nối đến FTP server port 21
+*
+* @IPAddr là địa chỉ của FTP server
+*
+* @Các thông báo lỗi, thông điệp nhận được sẽ được
+* cất toàn bộ vào hàng đợi outputControlMsg
+*/
 BOOL FTPConnection::OpenConnection(const char * IPAddr)
 {
 	auto isValidIPAddr = [](const char *IPAddr) {
@@ -67,43 +76,66 @@ BOOL FTPConnection::OpenConnection(const char * IPAddr)
 	return TRUE;
 }
 
+
+/*
+* Đăng nhập vào FTP server (chỉ khi đã thiết lập kết nối thành công)
+* 
+* @userName : tên người dùng
+* @userPass : mật khẩu
+* 
+* @Khi được gọi thì chỉ truyền 1 trong 2 tham số trên, ko truyền
+* thời do có tương tác sau lần nhập tên
+*
+* @Các thông báo lỗi, thông điệp nhận được sẽ được
+* cất toàn bộ vào hàng đợi outputControlMsg
+*/
+
 BOOL FTPConnection::LogIn(const char * userName, const char * userPass)
 {
-	
 	char msg[MAX_BUFFER];
 	int msgSz;
+
+	// Khi có truyền userName
+	if (userName)
+	{	
+		sprintf_s(msg, "USER %s\r\n", userName);
+		msgSz = strlen(msg);
+		msg[msgSz] = '\0';
+		if (controlSock.Send(&msg, msgSz) <= 0) {
+			sprintf_s(msg, "%s %d", "Error code: ", controlSock.GetLastError());
+			outputControlMsg.push(CString(msg));
+			return FALSE;
+		}
+
+		if ((msgSz = controlSock.Receive(msg, MAX_BUFFER)) <= 0) {
+			sprintf_s(msg, "%s %d", "Error code: ", controlSock.GetLastError());
+			outputControlMsg.push(CString(msg));
+			return FALSE;
+		}
+		msg[msgSz] = '\0';						//Thêm kí tự NULL vào cuối thông điệp nhận được
+		outputControlMsg.push(CString(msg));
+
+		if (getRelyCode(msg) != 331)
+			return FALSE;
+		return TRUE;
+	}
 	
-	sprintf_s(msg, "USER %s\r\n", userName);
-	msgSz = strlen(msg);  
-	msg[msgSz] = '\0';
-	if (controlSock.Send(&msg, msgSz) <= 0){
-		sprintf_s(msg, "%s %d", "Error code: ", controlSock.GetLastError());
-		return FALSE;
-	}
-
-	if ((msgSz = controlSock.Receive(msg, MAX_BUFFER)) <= 0){
-		sprintf_s(msg, "%s %d", "Error code: ", controlSock.GetLastError());
-		return FALSE;
-	}
-	msg[msgSz] = '\0';
-	outputControlMsg.push(CString(msg));
-
-	if (getRelyCode(msg) != 331)
-		return FALSE;
-
+	// Khi không truyền userName (truyền password)
 	sprintf_s(msg, "PASS %s\r\n", userPass);
 	msgSz = strlen(msg);
 	msg[msgSz] = '\0';
 	if (controlSock.Send(&msg, msgSz) <= 0) {
 		sprintf_s(msg, "%s %d", "Error code: ", controlSock.GetLastError());
+		outputControlMsg.push(CString(msg));
 		return FALSE;
 	}
 
 	if ((msgSz = controlSock.Receive(msg, MAX_BUFFER)) <= 0) {
 		sprintf_s(msg, "%s %d", "Error code: ", controlSock.GetLastError());
+		outputControlMsg.push(CString(msg));
 		return FALSE;
 	}
-	msg[msgSz] = '\0';
+	msg[msgSz] = '\0';							//Thêm kí tự NULL vào cuối thông điệp nhận được
 	outputControlMsg.push(CString(msg));
 
 	if (getRelyCode(msg) != 230)
@@ -111,23 +143,35 @@ BOOL FTPConnection::LogIn(const char * userName, const char * userPass)
 	return TRUE;
 }
 
+/*
+* Kết thúc 1 phiên làm việc với FTP Server
+*
+* @Các thông báo lỗi, thông điệp nhận được sẽ được
+* cất toàn bộ vào hàng đợi outputControlMsg
+*/
 BOOL FTPConnection::Close()
 {
-
 	char msg[MAX_BUFFER];
 	int msgSz;
+
 	sprintf_s(msg, "QUIT\r\n");
 	msgSz = strlen(msg);
+	
 	if (controlSock.Send(&msg, msgSz) <= 0) {
 		sprintf_s(msg, "%s %d", "Error code: ", controlSock.GetLastError());
+		outputControlMsg.push(CString(msg));
 		return FALSE;
 	}
+
 	if ((msgSz = controlSock.Receive(msg, MAX_BUFFER)) <= 0) {
 		sprintf_s(msg, "%s %d", "Error code: ", controlSock.GetLastError());
+		outputControlMsg.push(CString(msg));
 		return FALSE;
 	}
-	msg[msgSz] = '\0';
+
+	msg[msgSz] = '\0';							//Thêm kí tự NULL vào cuối thông điệp nhận được
 	outputControlMsg.push(CString(msg));
+
 	if (getRelyCode(msg) != 221)
 		return FALSE;
 	controlSock.Close();
@@ -137,9 +181,4 @@ BOOL FTPConnection::Close()
 BOOL FTPConnection::ListAllFile(char * fileExt)
 {
 	return 0;
-}
-
-void FTPConnection::GetOutputControlMsg(queue<CString>& des)
-{
-	des = outputControlMsg;
 }
