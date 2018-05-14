@@ -12,6 +12,7 @@ class FTPConnection
 private:
 	CSocket controlSock;
 	CString clientIPAddr;
+	//char recvMsg[MAX_BUFFER];
 	bool isPassive;
 	queue<CString> outputMsg;
 	queue<CString> outputControlMsg;
@@ -19,7 +20,8 @@ private:
 public:
 	FTPConnection();
 	~FTPConnection();
-	BOOL OpenConnection(char* IPAddr);
+	BOOL OpenConnection(const char* IPAddr);
+	BOOL LogIn(const char *userName, const char *userPass);
 	BOOL Close();
 	BOOL ListAllFile(char* fileExt);
 	void GetOutputControlMsg(queue<CString> &des);
