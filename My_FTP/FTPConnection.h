@@ -11,16 +11,18 @@ class FTPConnection
 {
 private:
 	CSocket controlSock;									//Socket chính, kết nối tới port 21 trên Server
+	CSocket dataSock;										
+	CSocket dataTrans;
 	CString clientIPAddr;		
-	//char recvMsg[MAX_BUFFER];
+	
 	bool isPassive;											//Đang ở mode Active hay Passive
 	void InitDataSock(bool isPass, CSocket &);
 public:
 	FTPConnection();
 	~FTPConnection();
 	BOOL OpenConnection(const char* IPAddr);				//Thiết lập kết nối tới Server
-	BOOL LogIn(const char *userName, const char *userPass);	//Trong lúc gọi hàm thì chỉ truyền 1 tham sô
-															//tham số còn lại để trống
+	BOOL LogIn(const char *userName, const char *userPass);	//Truyền cả 2 tham số, đã sửa lại!
+															
 	BOOL Close();
 	BOOL ListAllFile(char* fileExt);
 

@@ -47,7 +47,7 @@ BOOL FTPConnection::OpenConnection(const char * IPAddr)
 	};
 
 	if (!isValidIPAddr(IPAddr)) {
-		outputControlMsg.push(CString("Unknow host"));
+		outputControlMsg.push(CString("Unknow host\n"));
 		return FALSE;
 	}
 
@@ -55,16 +55,19 @@ BOOL FTPConnection::OpenConnection(const char * IPAddr)
 	int msgSz;
 
 	if (!controlSock.Connect(IPAddr, 21)) {
-		sprintf_s(msg, "%s %d", "Error code: ", controlSock.GetLastError());
+		sprintf_s(msg, "%s %d\n", "Error code: ", controlSock.GetLastError());
 		outputControlMsg.push(CString(msg));
 		return FALSE;
 	}
+
+	sprintf_s(msg, "Connected to %s.\n", IPAddr);
+	outputControlMsg.push(CString(msg));
 
 	UINT clientControlPort;
 	controlSock.GetSockName(clientIPAddr, clientControlPort);
 
 	if ((msgSz = controlSock.Receive(msg, MAX_BUFFER)) <= 0){
-		sprintf_s(msg, "%s %d", "Error code: ", controlSock.GetLastError());
+		sprintf_s(msg, "%s %d\n", "Error code: ", controlSock.GetLastError());
 		outputControlMsg.push(CString(msg));
 		return FALSE;
 	}
@@ -95,43 +98,37 @@ BOOL FTPConnection::LogIn(const char * userName, const char * userPass)
 	char msg[MAX_BUFFER];
 	int msgSz;
 
-	// Khi có truyền userName
-	if (userName)
-	{	
-		sprintf_s(msg, "USER %s\r\n", userName);
-		msgSz = strlen(msg);
-		msg[msgSz] = '\0';
-		if (controlSock.Send(&msg, msgSz) <= 0) {
-			sprintf_s(msg, "%s %d", "Error code: ", controlSock.GetLastError());
-			outputControlMsg.push(CString(msg));
-			return FALSE;
-		}
-
-		if ((msgSz = controlSock.Receive(msg, MAX_BUFFER)) <= 0) {
-			sprintf_s(msg, "%s %d", "Error code: ", controlSock.GetLastError());
-			outputControlMsg.push(CString(msg));
-			return FALSE;
-		}
-		msg[msgSz] = '\0';						//Thêm kí tự NULL vào cuối thông điệp nhận được
-		outputControlMsg.push(CString(msg));
-
-		if (getRelyCode(msg) != 331)
-			return FALSE;
-		return TRUE;
-	}
-	
-	// Khi không truyền userName (truyền password)
-	sprintf_s(msg, "PASS %s\r\n", userPass);
+	sprintf_s(msg, "USER %s\r\n", userName);
 	msgSz = strlen(msg);
 	msg[msgSz] = '\0';
 	if (controlSock.Send(&msg, msgSz) <= 0) {
-		sprintf_s(msg, "%s %d", "Error code: ", controlSock.GetLastError());
+		sprintf_s(msg, "%s %d\n", "Error code: ", controlSock.GetLastError());
 		outputControlMsg.push(CString(msg));
 		return FALSE;
 	}
 
 	if ((msgSz = controlSock.Receive(msg, MAX_BUFFER)) <= 0) {
-		sprintf_s(msg, "%s %d", "Error code: ", controlSock.GetLastError());
+		sprintf_s(msg, "%s %d\n", "Error code: ", controlSock.GetLastError());
+		outputControlMsg.push(CString(msg));
+		return FALSE;
+	}
+	msg[msgSz] = '\0';						//Thêm kí tự NULL vào cuối thông điệp nhận được
+	outputControlMsg.push(CString(msg));
+
+	if (getRelyCode(msg) != 331)
+		return FALSE;
+	
+	sprintf_s(msg, "PASS %s\r\n", userPass);
+	msgSz = strlen(msg);
+	msg[msgSz] = '\0';
+	if (controlSock.Send(&msg, msgSz) <= 0) {
+		sprintf_s(msg, "%s %d\n", "Error code: ", controlSock.GetLastError());
+		outputControlMsg.push(CString(msg));
+		return FALSE;
+	}
+
+	if ((msgSz = controlSock.Receive(msg, MAX_BUFFER)) <= 0) {
+		sprintf_s(msg, "%s %d\n", "Error code: ", controlSock.GetLastError());
 		outputControlMsg.push(CString(msg));
 		return FALSE;
 	}
@@ -158,13 +155,13 @@ BOOL FTPConnection::Close()
 	msgSz = strlen(msg);
 	
 	if (controlSock.Send(&msg, msgSz) <= 0) {
-		sprintf_s(msg, "%s %d", "Error code: ", controlSock.GetLastError());
+		sprintf_s(msg, "%s %d\n", "Error code: ", controlSock.GetLastError());
 		outputControlMsg.push(CString(msg));
 		return FALSE;
 	}
 
 	if ((msgSz = controlSock.Receive(msg, MAX_BUFFER)) <= 0) {
-		sprintf_s(msg, "%s %d", "Error code: ", controlSock.GetLastError());
+		sprintf_s(msg, "%s %d\n", "Error code: ", controlSock.GetLastError());
 		outputControlMsg.push(CString(msg));
 		return FALSE;
 	}
