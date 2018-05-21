@@ -26,7 +26,7 @@ public:
 	BOOL InitDataSock(bool isPass);							//Thiết lập kết nối TCP
 	BOOL Close();
 	BOOL ListAllFile(char* fileExt);
-	BOOL LocalChangeDir(char* directory);
+	BOOL LocalChangeDir(const char* directory);
 	queue<CString> outputMsg;								
 	queue<CString> outputControlMsg;						//Hàng đợi chứa thông điệp nhận được, lỗi,...
 };															//trong quá trình gọi hàm

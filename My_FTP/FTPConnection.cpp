@@ -66,6 +66,7 @@ FTPConnection::FTPConnection()
 	}
 
 	// Lấy đường dẫn home dir trên windows C:/User/[Username]
+	// CSIDL_PROFILE chính là hằng số đại diện đường dẫn trên
 	SHGetSpecialFolderPath(NULL, currentDir.GetBuffer(MAX_PATH), CSIDL_PROFILE, FALSE);
 	currentDir.ReleaseBuffer();
 }
@@ -230,24 +231,30 @@ BOOL FTPConnection::ListAllFile(char * fileExt)
 	return 0;
 }
 
-BOOL FTPConnection::LocalChangeDir(char * directory)
+BOOL FTPConnection::LocalChangeDir(const char * directory)
 {
 	CString msg;
-	BOOL bRet = TRUE;
+	BOOL bRet = FALSE;
+
+	// Nếu truyền chuỗi rỗng thì lấy thư mục hiện hành
+	// Mặc định là C:\Users\[Username]
+	// currentDir được lấy ở class constructor
 
 	if (*directory != '\0')
-		bRet = SetCurrentDirectory(directory);
+		bRet = SetCurrentDirectory(currentDir + "\\" + directory) || SetCurrentDirectory(directory);
+	else
+		bRet = SetCurrentDirectory(currentDir);
 	
 	if (bRet == TRUE)
 	{
-		if (*directory != '\0')
-			currentDir = directory;
-		msg.Format("Local directory now %s", currentDir);
+		GetCurrentDirectory(MAX_PATH, currentDir.GetBuffer(MAX_PATH));
+		currentDir.ReleaseBuffer();
+		msg.Format("Local directory now %s\n", currentDir);
 		outputMsg.push(msg);
 		return TRUE;
 	}
 
-	msg.Format("%s: File not found", directory);
+	msg.Format("%s: File not found\n", directory);
 	outputMsg.push(msg);
 	return FALSE;
 }
