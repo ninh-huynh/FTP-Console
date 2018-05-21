@@ -23,6 +23,7 @@ BOOL FTPConnection::InitDataSock(bool isPass)
 		CString ip;
 		UINT port;
 		controlSock.GetSockName(ip, port);
+		ip.Replace(_T('.'), _T(','));
 		sprintf_s(msg, "PORT %s,%d,%d\r\n", ip.GetString(), port / 256, port % 256);
 
 	}
