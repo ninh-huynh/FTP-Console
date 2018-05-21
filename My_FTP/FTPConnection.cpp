@@ -8,8 +8,54 @@ int getRelyCode(const char *relyMsg)
 	return RelyCode;
 }
 
-void FTPConnection::InitDataSock(bool isPass, CSocket &)
+BOOL FTPConnection::InitDataSock(bool isPass)
 {
+	char msg[MAX_BUFFER]{0};
+	int msgSz;
+
+	if (isPass)
+	{
+		sprintf_s(msg, "PASV\r\n");
+	}
+	else
+	{
+		dataSock.Create();
+		CString ip;
+		UINT port;
+		controlSock.GetSockName(ip, port);
+		sprintf_s(msg, "PORT %s,%d,%d\r\n", ip.GetString(), port / 256, port % 256);
+
+	}
+
+	// gửi lệnh PASV/PORT
+	if (controlSock.Send(msg, strlen(msg), 0) <= 0)
+	{
+		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
+		outputControlMsg.push(msg);
+		return false;
+	}
+
+	// nhận phản hồi từ server
+	if ((msgSz = controlSock.Receive(msg, MAX_BUFFER)) <= 0)
+	{
+		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
+		outputControlMsg.push(msg);
+		return false;
+	}
+
+	// kiểm tra code từ phản hồi của server
+	int code = getRelyCode(msg);
+	if (code != (isPass ? 227 : 200))		// "227 Entering Passive Mode (h1,h2,h3,h4,p1,p2)", "200 PORT command successful"
+	{
+		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
+		outputControlMsg.push(msg);
+		return false;
+	}
+
+	msg[msgSz] = '\0';
+	outputControlMsg.push(msg);
+
+	return true;
 }
 
 FTPConnection::FTPConnection()
