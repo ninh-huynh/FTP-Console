@@ -2,6 +2,7 @@
 #include <afxsock.h>
 #include <queue>
 #include <cstdio>
+#include <regex>
 
 #define MAX_BUFFER 1461
 
@@ -17,13 +18,12 @@ private:
 	CString currentDir;
 
 	bool isPassive;											//Đang ở mode Active hay Passive
-	void InitDataSock(bool isPass, CSocket &);
 public:
 	FTPConnection();
 	~FTPConnection();
 	BOOL OpenConnection(const char* IPAddr);				//Thiết lập kết nối tới Server
 	BOOL LogIn(const char *userName, const char *userPass);	//Truyền cả 2 tham số, đã sửa lại!
-															
+	BOOL InitDataSock(bool isPass);							//Thiết lập kết nối TCP
 	BOOL Close();
 	BOOL ListAllFile(char* fileExt);
 	BOOL LocalChangeDir(const char* directory);
