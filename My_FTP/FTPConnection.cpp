@@ -14,15 +14,13 @@ void FTPConnection::InitDataSock(bool isPass, CSocket &)
 
 FTPConnection::FTPConnection()
 {
-	char msg[MAX_BUFFER];
 	if (!AfxSocketInit()) {
 		outputControlMsg.push(CString("Failed to Initialize Sockets"));
 	}
 
-	if(!controlSock.Create()){
-		sprintf_s(msg, "%s %d", "Error code: ", controlSock.GetLastError());
-		outputControlMsg.push(CString(msg));
-	}
+	// Lấy đường dẫn home dir trên windows C:/User/[Username]
+	SHGetSpecialFolderPath(NULL, currentDir.GetBuffer(MAX_PATH), CSIDL_PROFILE, FALSE);
+	currentDir.ReleaseBuffer();
 }
 
 FTPConnection::~FTPConnection()
@@ -41,6 +39,14 @@ FTPConnection::~FTPConnection()
 */
 BOOL FTPConnection::OpenConnection(const char * IPAddr)
 {
+	char msg[MAX_BUFFER];
+	int msgSz;
+
+	if (!controlSock.Create()) {
+		sprintf_s(msg, "%s %d", "Error code: ", controlSock.GetLastError());
+		outputControlMsg.push(CString(msg));
+	}
+
 	auto isValidIPAddr = [](const char *IPAddr) {
 		UINT a, b, c, d;
 		return sscanf_s(IPAddr, "%d.%d.%d.%d", &a, &b, &c, &d) == 4;
@@ -50,9 +56,6 @@ BOOL FTPConnection::OpenConnection(const char * IPAddr)
 		outputControlMsg.push(CString("Unknow host\n"));
 		return FALSE;
 	}
-
-	char msg[MAX_BUFFER];
-	int msgSz;
 
 	if (!controlSock.Connect(IPAddr, 21)) {
 		sprintf_s(msg, "%s %d\n", "Error code: ", controlSock.GetLastError());
@@ -178,4 +181,26 @@ BOOL FTPConnection::Close()
 BOOL FTPConnection::ListAllFile(char * fileExt)
 {
 	return 0;
+}
+
+BOOL FTPConnection::LocalChangeDir(char * directory)
+{
+	CString msg;
+	BOOL bRet = TRUE;
+
+	if (*directory != '\0')
+		bRet = SetCurrentDirectory(directory);
+	
+	if (bRet == TRUE)
+	{
+		if (*directory != '\0')
+			currentDir = directory;
+		msg.Format("Local directory now %s", currentDir);
+		outputMsg.push(msg);
+		return TRUE;
+	}
+
+	msg.Format("%s: File not found", directory);
+	outputMsg.push(msg);
+	return FALSE;
 }

@@ -14,7 +14,8 @@ private:
 	CSocket dataSock;										
 	CSocket dataTrans;
 	CString clientIPAddr;		
-	
+	CString currentDir;
+
 	bool isPassive;											//Đang ở mode Active hay Passive
 	void InitDataSock(bool isPass, CSocket &);
 public:
@@ -25,7 +26,7 @@ public:
 															
 	BOOL Close();
 	BOOL ListAllFile(char* fileExt);
-
+	BOOL LocalChangeDir(char* directory);
 	queue<CString> outputMsg;								
 	queue<CString> outputControlMsg;						//Hàng đợi chứa thông điệp nhận được, lỗi,...
 };															//trong quá trình gọi hàm
