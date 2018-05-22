@@ -25,7 +25,7 @@ public:
 	BOOL LogIn(const char *userName, const char *userPass);	//Truyền cả 2 tham số, đã sửa lại!
 	BOOL InitDataSock(bool isPass);							//Thiết lập kết nối TCP
 	BOOL Close();
-	BOOL ListAllFile(char* fileExt);
+	BOOL ListAllFile(const char* fileExt);
 	BOOL LocalChangeDir(const char* directory);
 	queue<CString> outputMsg;								
 	queue<CString> outputControlMsg;						//Hàng đợi chứa thông điệp nhận được, lỗi,...
