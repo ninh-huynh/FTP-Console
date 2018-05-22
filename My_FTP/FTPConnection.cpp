@@ -8,16 +8,13 @@ int getRelyCode(const char *relyMsg)
 	return RelyCode;
 }
 
-BOOL FTPConnection::InitDataSock(bool isPasv)
+BOOL FTPConnection::InitDataSock()
 {
 	char msg[MAX_BUFFER]{0};
 	int msgSz;
 
-	if (isPasv)
-	{
+	if (isPassive)
 		sprintf_s(msg, "PASV\r\n");
-		isPassive = true;
-	}
 	else
 	{
 		dataSock.Create();
@@ -49,11 +46,11 @@ BOOL FTPConnection::InitDataSock(bool isPasv)
 	msg[msgSz] = '\0';
 	outputControlMsg.push(msg);
 	// kiểm tra code từ phản hồi của server
-	if (getRelyCode(msg) != (isPasv ? 227 : 200))		// "227 Entering Passive Mode (h1,h2,h3,h4,p1,p2)", "200 PORT command successful"
+	if (getRelyCode(msg) != (isPassive ? 227 : 200))		// "227 Entering Passive Mode (h1,h2,h3,h4,p1,p2)", "200 PORT command successful"
 		return false;
 
 	// lưu data port của server ở chế độ PASSIVE
-	if (isPasv)
+	if (isPassive)
 	{
 		cmatch match_results;
 		regex expr("(\\d{1,3})\\,(\\d{1,3})\\)");
@@ -275,11 +272,9 @@ BOOL FTPConnection::ListAllFile(const CString& fileExt, const CString& remote_di
 	sprintf_s(msg, "NLST %s %s\r\n", fileExt.GetString(), remote_dir.GetString());
 
 	// thiết lập kết nối nếu ở chế độ active (mặc định)
-	if (!isPassive)
-	{
-		InitDataSock(FALSE);
-		this->PrintControlMsg();
-	}
+	InitDataSock();
+	this->PrintControlMsg();
+	
 
 	// Gửi lệnh NLST cho server
 	if (controlSock.Send(msg, strlen(msg), 0) <= 0)
@@ -403,4 +398,10 @@ void FTPConnection::PrintControlMsg()
 		cout << this->outputMsg.front();
 		this->outputMsg.pop();
 	}
+}
+
+void FTPConnection::SetPassiveMode()
+{
+	isPassive = true;
+	outputControlMsg.push("Passive mode on.\n");
 }

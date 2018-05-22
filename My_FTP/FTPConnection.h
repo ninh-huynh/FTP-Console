@@ -28,7 +28,7 @@ public:
 	~FTPConnection();
 	BOOL OpenConnection(const char* IPAddr);				//Thiết lập kết nối tới Server
 	BOOL LogIn(const char *userName, const char *userPass);	//Truyền cả 2 tham số, đã sửa lại!
-	BOOL InitDataSock(bool isPass);							//Thiết lập kết nối TCP
+	BOOL InitDataSock();							//Thiết lập kết nối TCP
 	BOOL Close();
 	BOOL ListAllFile(const CString& fileExt, const CString& remote_dir, const CString& local_file);
 	BOOL LocalChangeDir(const char* directory);
@@ -36,6 +36,7 @@ public:
 	queue<CString> outputControlMsg;						//Hàng đợi chứa thông điệp nhận được, lỗi,...
 															//trong quá trình gọi hàm
 	void PrintControlMsg();
+	void SetPassiveMode();
 };															
 
 
