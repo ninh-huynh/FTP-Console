@@ -34,7 +34,8 @@ public:
 	BOOL ListAllFile(const CString& remote_dir, const CString& local_file);
 	BOOL ListAllDirectory(const char *remote_dir, const char *local_file);
 	BOOL LocalChangeDir(const char* directory);
-	vector<CString> outputMsg;								
+	BOOL CreateDir(const char* directory);
+	vector<CString> outputMsg;
 	queue<CString> outputControlMsg;						//Hàng đợi chứa thông điệp nhận được, lỗi,...
 															//trong quá trình gọi hàm
 	//void PrintControlMsg();

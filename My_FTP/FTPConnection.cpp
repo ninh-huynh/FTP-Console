@@ -488,6 +488,34 @@ BOOL FTPConnection::LocalChangeDir(const char * directory)
 	return FALSE;
 }
 
+BOOL FTPConnection::CreateDir(const char * directory)
+{
+	char msg[MAX_BUFFER];
+	int msgSz;
+
+	sprintf_s(msg, "MKD %s\r\n", directory);
+	msgSz = strlen(msg);
+
+	if (controlSock.Send(&msg, msgSz) <= 0) {
+		sprintf_s(msg, "%s %d\n", "Error code: ", controlSock.GetLastError());
+		outputControlMsg.push(CString(msg));
+		return FALSE;
+	}
+
+	if ((msgSz = controlSock.Receive(msg, MAX_BUFFER)) <= 0) {
+		sprintf_s(msg, "%s %d\n", "Error code: ", controlSock.GetLastError());
+		outputControlMsg.push(CString(msg));
+		return FALSE;
+	}
+
+	msg[msgSz] = '\0';							//Thêm kí tự NULL vào cuối thông điệp nhận được
+	outputControlMsg.push(CString(msg));
+
+	if (getRelyCode(msg) != 257)				// "257 ... directory created." 
+		return FALSE;
+	return TRUE;
+}
+
 //void FTPConnection::PrintControlMsg()
 //{
 //	while (!this->outputControlMsg.empty())
