@@ -32,6 +32,7 @@ public:
 	BOOL InitDataSock();							//Thiết lập kết nối TCP
 	BOOL Close();
 	BOOL ListAllFile(const CString& remote_dir, const CString& local_file);
+	BOOL ListAllDirectory(const char *remote_dir, const char *local_file);
 	BOOL LocalChangeDir(const char* directory);
 	vector<CString> outputMsg;								
 	queue<CString> outputControlMsg;						//Hàng đợi chứa thông điệp nhận được, lỗi,...
