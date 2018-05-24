@@ -7,7 +7,8 @@
 #include <fstream>
 #include <vector>
 
-#define MAX_BUFFER 1461
+#define MAX_BUFFER 255			//1461
+#define MAX_TRANSFER 4096
 
 using namespace std;
 
@@ -35,6 +36,7 @@ public:
 	BOOL ListAllDirectory(const char *remote_dir, const char *local_file);
 	BOOL LocalChangeDir(const char* directory);
 	BOOL CreateDir(const char* directory);
+	BOOL PutFile(const char *localFile, const char *remoteFile);
 	vector<CString> outputMsg;
 	queue<CString> outputControlMsg;						//Hàng đợi chứa thông điệp nhận được, lỗi,...
 															//trong quá trình gọi hàm

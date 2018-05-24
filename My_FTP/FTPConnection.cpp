@@ -30,7 +30,10 @@ BOOL FTPConnection::InitDataSock()
 	int msgSz;
 
 	if (isPassive)
+	{
 		sprintf_s(msg, "PASV\r\n");
+		dataTrans.Create();
+	}
 	else
 	{
 		dataSock.Create();
@@ -326,7 +329,7 @@ BOOL FTPConnection::ListAllFile(const CString& remote_dir, const CString& local_
 	}
 
 	// bắt đầu nhận phản hồi từ data port (thông tin danh sách file)
-	while ((msgSz = dataTrans.Receive(msg, MAX_BUFFER - 1, 0)) > 0)
+	while ((msgSz = dataTrans.Receive(msg, MAX_TRANSFER - 1, 0)) > 0)
 	{
 		msg[msgSz] = '\0';
 		splitLineToVector(msg, outputMsg);
@@ -432,11 +435,11 @@ BOOL FTPConnection::ListAllDirectory(const char * remote_dir, const char * local
 		return false;
 
 	// Nhận data ở cả active và passive
-	char data[MAX_BUFFER] = { 0 };
+	char data[MAX_TRANSFER] = { 0 };
 	int dataSz;
 	CString buff;
 
-	while ((dataSz = dataTrans.Receive(data, MAX_BUFFER - 1)) > 0)
+	while ((dataSz = dataTrans.Receive(data, MAX_TRANSFER - 1)) > 0)
 	{
 		data[dataSz] = '\0';
 		splitLineToVector(data, outputMsg);
@@ -514,6 +517,140 @@ BOOL FTPConnection::CreateDir(const char * directory)
 	if (getRelyCode(msg) != 257)				// "257 ... directory created." 
 		return FALSE;
 	return TRUE;
+}
+
+BOOL FTPConnection::PutFile(const char * localFile, const char * remoteFile)
+{
+	char msg[MAX_BUFFER];
+	int msgSz;
+
+	ifstream file;
+	file.open(localFile, ios::binary);
+	if (!file.is_open())												// Nếu không mở được file -> tb lỗi, thoát ngay
+	{
+		sprintf_s(msg, "%s: File not found.\r\n", localFile);
+		outputControlMsg.push(msg);
+		return FALSE;
+	}
+
+	// Mở được file
+	if (InitDataSock() == false)
+		return false;
+
+	CString serverIP;
+	UINT serverPort;
+	if (isPassive)
+	{
+		int A, B, C, D, a, b;
+		sscanf_s(outputControlMsg.front().GetString(), "227 %*s %*s %*s (%d,%d,%d,%d,%d,%d)", &A, &B, &C, &D, &a, &b);
+		serverIP.Format("%d.%d.%d.%d", A, B, C, D);
+		serverPort = 256 * a + b;
+	}
+
+	sprintf_s(msg, "STOR %s\r\n", remoteFile);
+	msgSz = strlen(msg);
+	if (controlSock.Send(&msg, msgSz) <= 0)
+	{
+		sprintf_s(msg, "%s %d\n", "Error code: ", controlSock.GetLastError());
+		outputControlMsg.push(CString(msg));
+		file.close();
+		return FALSE;
+	}
+
+	if (!isPassive)
+	{
+		if (!dataSock.Listen())
+		{
+			sprintf_s(msg, "%s %d\n", "Error code: ", dataSock.GetLastError());
+			outputControlMsg.push(CString(msg));
+			file.close();
+			return FALSE;
+		}
+		else
+		{
+			if (!dataSock.Accept(dataTrans))
+			{
+				sprintf_s(msg, "%s %d\n", "Error code: ", dataSock.GetLastError());
+				outputControlMsg.push(CString(msg));
+				file.close();
+				return FALSE;
+			}
+		}
+	}
+
+
+	if ((msgSz = controlSock.Receive(msg, MAX_BUFFER)) <= 0) {
+		sprintf_s(msg, "%s %d\n", "Error code: ", controlSock.GetLastError());
+		outputControlMsg.push(CString(msg));
+		return false;
+	}
+
+	msg[msgSz] = '\0';
+	outputControlMsg.push(msg);
+
+	bool isReceivedEnough = false;
+	if ((CString(msg)).Find("\r\n") != msgSz - 2)
+		isReceivedEnough = true;
+
+	if (isPassive)
+	{
+		if (!dataTrans.Connect(serverIP.GetString(), serverPort))
+		{
+			sprintf_s(msg, "%s %d\n", "Error code: ", dataTrans.GetLastError());
+			outputControlMsg.push(CString(msg));
+			file.close();
+			return false;
+		}
+	}
+
+	int relyCode = getRelyCode(msg);
+	if (relyCode != 150 && relyCode != 125)
+	{
+		file.close();
+		return false;
+	}
+	// Gửi data ở cả active và passive
+	char data[MAX_TRANSFER - 1] = { 0 };
+	int dataSz;
+	int fileSz;
+	int nLoop;
+
+	file.seekg(0, file.end);
+	fileSz = file.tellg();
+	file.seekg(0, file.beg);
+
+	nLoop = fileSz / (MAX_TRANSFER - 1);
+	if (fileSz % (MAX_TRANSFER - 1) != 0)
+		nLoop += 1;
+
+	for (int i = 0; i < nLoop; i++)
+	{
+		if (i == nLoop - 1 && fileSz % (MAX_TRANSFER - 1) != 0)
+			dataSz = fileSz % (MAX_TRANSFER - 1);
+		else
+			dataSz = MAX_TRANSFER - 1;
+		file.read(data, MAX_TRANSFER - 1);
+		dataTrans.Send(&data, dataSz);
+	}
+	file.close();
+
+	dataTrans.Close();
+	if (!isPassive)
+		dataSock.Close();
+
+	if (!isReceivedEnough)
+	{
+		if ((msgSz = controlSock.Receive(msg, MAX_BUFFER)) <= 0) {
+			sprintf_s(msg, "%s %d\n", "Error code: ", controlSock.GetLastError());
+			outputControlMsg.push(CString(msg));
+			file.close();
+			return false;
+		}
+		msg[msgSz] = '\0';
+		outputControlMsg.push(msg);
+	}
+
+	return true;
 }
 
 //void FTPConnection::PrintControlMsg()
