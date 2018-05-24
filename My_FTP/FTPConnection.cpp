@@ -249,31 +249,15 @@ BOOL FTPConnection::Close()
  * 
  * @return TRUE/FALSE
  */
-BOOL FTPConnection::ListAllFile(const CString& fileExt, const CString& remote_dir, const CString& local_file)
+BOOL FTPConnection::ListAllFile(const CString& remote_dir, const CString& local_file)
 {
-	// mở file xuất (nếu có)
-	ofstream file;
-	ostream *os;
-	if (!local_file.IsEmpty())
-	{
-		// kiểm tra local_file là đường dẫn hay tên file
-		CString full_path = isPath(local_file) ? local_file : (currentDir + '\\' + local_file);
-		file.open(full_path.GetString());
-		os = &file;
-	}
-	else
-	{
-		os = &cout;
-	}
-
 	char msg[MAX_BUFFER]{ 0 };
 	int msgSz;
 
-	sprintf_s(msg, "NLST %s %s\r\n", fileExt.GetString(), remote_dir.GetString());
+	sprintf_s(msg, "NLST %s\r\n", remote_dir.GetString());
 
 	// thiết lập kết nối nếu ở chế độ active (mặc định)
 	InitDataSock();
-	this->PrintControlMsg();
 	
 
 	// Gửi lệnh NLST cho server
@@ -293,16 +277,15 @@ BOOL FTPConnection::ListAllFile(const CString& fileExt, const CString& remote_di
 	}
 
 	msg[msgSz] = '\0';
+	outputControlMsg.push(msg);
 	// kiểm tra code phản hồi, "150 Opening ASCII mode data connection for NLIST (773 bytes)"
 	if (getRelyCode(msg) != 150)
 	{
-		outputControlMsg.push(msg);
+		//outputControlMsg.push(msg);
 		return FALSE;
 	}
 
 	// đã nhận được phản hồi đúng từ server
-	msg[msgSz] = '\0';
-	std::cout << msg;
 
 	// thiết lập kết nối cho data socket
 	if (isPassive)
@@ -329,7 +312,8 @@ BOOL FTPConnection::ListAllFile(const CString& fileExt, const CString& remote_di
 	while ((msgSz = dataTrans.Receive(msg, MAX_BUFFER, 0)) > 0)
 	{
 		msg[msgSz] = '\0';
-		*os << msg;
+		//*os << msg;
+		outputMsg.push_back(msg);
 	}
 
 	// nhận phản hồi từ server
@@ -352,7 +336,7 @@ BOOL FTPConnection::ListAllFile(const CString& fileExt, const CString& remote_di
 		dataSock.Close();
 	dataTrans.Close();
 
-	isPassive = FALSE;		// trở lại chế độ active (mặc định)
+	//isPassive = FALSE;		// trở lại chế độ active (mặc định)
 
 	return TRUE;
 }
@@ -376,29 +360,29 @@ BOOL FTPConnection::LocalChangeDir(const char * directory)
 		GetCurrentDirectory(MAX_PATH, currentDir.GetBuffer(MAX_PATH));
 		currentDir.ReleaseBuffer();
 		msg.Format("Local directory now %s\n", currentDir);
-		outputMsg.push(msg);
+		outputControlMsg.push(msg);
 		return TRUE;
 	}
 
 	msg.Format("%s: File not found\n", directory);
-	outputMsg.push(msg);
+	outputControlMsg.push(msg);
 	return FALSE;
 }
 
-void FTPConnection::PrintControlMsg()
-{
-	while (!this->outputControlMsg.empty())
-	{
-		cout << this->outputControlMsg.front();
-		this->outputControlMsg.pop();
-	}
-
-	while (!this->outputMsg.empty())
-	{
-		cout << this->outputMsg.front();
-		this->outputMsg.pop();
-	}
-}
+//void FTPConnection::PrintControlMsg()
+//{
+//	while (!this->outputControlMsg.empty())
+//	{
+//		cout << this->outputControlMsg.front();
+//		this->outputControlMsg.pop();
+//	}
+//
+//	while (!this->outputMsg.empty())
+//	{
+//		cout << this->outputMsg.front();
+//		this->outputMsg.pop();
+//	}
+//}
 
 void FTPConnection::SetPassiveMode()
 {

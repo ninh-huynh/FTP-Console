@@ -5,6 +5,7 @@
 #include <regex>
 #include <memory>
 #include <fstream>
+#include <vector>
 
 #define MAX_BUFFER 1461
 
@@ -30,12 +31,12 @@ public:
 	BOOL LogIn(const char *userName, const char *userPass);	//Truyền cả 2 tham số, đã sửa lại!
 	BOOL InitDataSock();							//Thiết lập kết nối TCP
 	BOOL Close();
-	BOOL ListAllFile(const CString& fileExt, const CString& remote_dir, const CString& local_file);
+	BOOL ListAllFile(const CString& remote_dir, const CString& local_file);
 	BOOL LocalChangeDir(const char* directory);
-	queue<CString> outputMsg;								
+	vector<CString> outputMsg;								
 	queue<CString> outputControlMsg;						//Hàng đợi chứa thông điệp nhận được, lỗi,...
 															//trong quá trình gọi hàm
-	void PrintControlMsg();
+	//void PrintControlMsg();
 	void SetPassiveMode();
 };															
 
