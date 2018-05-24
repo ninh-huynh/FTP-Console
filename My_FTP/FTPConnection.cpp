@@ -8,31 +8,22 @@ int getRelyCode(const char *relyMsg)
 	return RelyCode;
 }
 
-BOOL FTPConnection::InitDataSock(bool isPass)
+BOOL FTPConnection::InitDataSock()
 {
 	char msg[MAX_BUFFER]{0};
 	int msgSz;
 
-	if (isPass)
-	{
-		dataTrans.Create();
+	if (isPassive)
 		sprintf_s(msg, "PASV\r\n");
-	}
 	else
 	{
 		dataSock.Create();
-		//CString ip;
-		//UINT port;
-		//controlSock.GetSockName(ip, port);
-		//ip.Replace(_T('.'), _T(','));
-		//sprintf_s(msg, "PORT %s,%d,%d\r\n", ip.GetString(), port / 256, port % 256);
-
-		CString dummy, ip;
-		UINT dataPort;
-		dataSock.GetSockName(dummy, dataPort);
+		CString ip;
+		UINT port;
+		dataSock.GetSockName(ip, port);
 		ip = clientIPAddr;
 		ip.Replace(_T('.'), _T(','));
-		sprintf_s(msg, "PORT %s,%d,%d\r\n", ip.GetString(), dataPort / 256, dataPort % 256);
+		sprintf_s(msg, "PORT %s,%d,%d\r\n", ip.GetString(), port / 256, port % 256);
 
 	}
 
@@ -52,19 +43,28 @@ BOOL FTPConnection::InitDataSock(bool isPass)
 		return false;
 	}
 
-	// kiểm tra code từ phản hồi của server
-	int code = getRelyCode(msg);
-	if (code != (isPass ? 227 : 200))		// "227 Entering Passive Mode (h1,h2,h3,h4,p1,p2)", "200 PORT command successful"
-	{
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(msg);
-		return false;
-	}
-
 	msg[msgSz] = '\0';
 	outputControlMsg.push(msg);
+	// kiểm tra code từ phản hồi của server
+	if (getRelyCode(msg) != (isPassive ? 227 : 200))		// "227 Entering Passive Mode (h1,h2,h3,h4,p1,p2)", "200 PORT command successful"
+		return false;
+
+	// lưu data port của server ở chế độ PASSIVE
+	if (isPassive)
+	{
+		cmatch match_results;
+		regex expr("(\\d{1,3})\\,(\\d{1,3})\\)");
+
+		regex_search(msg, match_results, expr);
+		server_data_port = stoi(match_results[1]) * 256 + stoi(match_results[2]);
+	}
 
 	return true;
+}
+
+bool FTPConnection::isPath(const CString& s)
+{
+	return (s.Find(_T('/')) != -1) || (s.Find('\\') != -1);
 }
 
 FTPConnection::FTPConnection()
@@ -77,6 +77,7 @@ FTPConnection::FTPConnection()
 	// CSIDL_PROFILE chính là hằng số đại diện đường dẫn trên
 	SHGetSpecialFolderPath(NULL, currentDir.GetBuffer(MAX_PATH), CSIDL_PROFILE, FALSE);
 	currentDir.ReleaseBuffer();
+	SetCurrentDirectory(currentDir);
 }
 
 FTPConnection::~FTPConnection()
@@ -234,112 +235,111 @@ BOOL FTPConnection::Close()
 	return TRUE;
 }
 
-BOOL FTPConnection::ListAllFile(const char * fileExt)
+/**
+ * - Hàm lấy thông tin danh sách file từ remote-directory (lệnh "LS")
+ * - Cú pháp sử dụng (ví dụ):
+ *   + ls abc.*
+ *   + ls *.abc
+ *   + ls /a/b/c abc.txt	(lưu vào currentDir trên client)
+ *   + ls /a/b/c path		(lưu vào path)
+ * 
+ * 
+ * @fileExt điều kiện lọc các file
+ * @remote_dir thư mục muốn xem trên server
+ * @local_file file/đường dẫn lưu thông tin ở client
+ * 
+ * @return TRUE/FALSE
+ */
+BOOL FTPConnection::ListAllFile(const CString& remote_dir, const CString& local_file)
 {
-	char msg[MAX_BUFFER];
+	char msg[MAX_BUFFER]{ 0 };
 	int msgSz;
 
-	if (InitDataSock(isPassive) == false)
-		return false;
+	sprintf_s(msg, "NLST %s\r\n", remote_dir.GetString());
 
-	CString serverIP;
-	UINT serverPort;
-	if (isPassive)
-	{
-		int A, B, C, D, a, b;
-		sscanf_s(outputControlMsg.front().GetString(), "227 %*s %*s %*s (%d,%d,%d,%d,%d,%d)", &A, &B, &C, &D, &a, &b);
-		serverIP.Format("%d.%d.%d.%d", A, B, C, D);
-		serverPort = 256 * a + b;
-	}
+	// thiết lập kết nối nếu ở chế độ active (mặc định)
+	InitDataSock();
+	
 
-	sprintf_s(msg, "NLST %s\r\n", fileExt);
-	msgSz = strlen(msg);
-	if (controlSock.Send(&msg, msgSz) <= 0)
+	// Gửi lệnh NLST cho server
+	if (controlSock.Send(msg, strlen(msg), 0) <= 0)
 	{
-		sprintf_s(msg, "%s %d\n", "Error code: ", controlSock.GetLastError());
-		outputControlMsg.push(CString(msg));
+		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
+		outputControlMsg.push(msg);
 		return FALSE;
 	}
 
-	if (!isPassive)
+	// nhận phản hồi từ server
+	if ((msgSz = controlSock.Receive(msg, MAX_BUFFER, 0)) <= 0)
 	{
-		if (!dataSock.Listen())
-		{
-			sprintf_s(msg, "%s %d\n", "Error code: ", dataSock.GetLastError());
-			outputControlMsg.push(CString(msg));
-			return FALSE;
-		}
-		else
-		{
-			if (!dataSock.Accept(dataTrans))
-			{
-				sprintf_s(msg, "%s %d\n", "Error code: ", dataSock.GetLastError());
-				outputControlMsg.push(CString(msg));
-				return FALSE;
-			}
-		}
+		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
+		outputControlMsg.push(msg);
+		return FALSE;
 	}
 
+	msg[msgSz] = '\0';
+	outputControlMsg.push(msg);
+	// kiểm tra code phản hồi, "150 Opening ASCII mode data connection for NLIST (773 bytes)"
+	if (getRelyCode(msg) != 150)
+	{
+		//outputControlMsg.push(msg);
+		return FALSE;
+	}
 
-	if ((msgSz = controlSock.Receive(msg, MAX_BUFFER)) <= 0) {
-		sprintf_s(msg, "%s %d\n", "Error code: ", controlSock.GetLastError());
-		outputControlMsg.push(CString(msg));
-		return false;
+	// đã nhận được phản hồi đúng từ server
+
+	// thiết lập kết nối cho data socket
+	if (isPassive)
+	{
+		CString server_ip;
+		UINT dummy;
+		controlSock.GetPeerName(server_ip, dummy);
+		dataTrans.Create();
+		dataTrans.Connect(server_ip, server_data_port);
+	}
+	else
+	{
+		if (!dataSock.Listen(1))
+		{
+			sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
+			outputControlMsg.push(msg);
+			return FALSE;
+		}
+
+		dataSock.Accept(dataTrans);
+	}
+
+	// bắt đầu nhận phản hồi từ data port (thông tin danh sách file)
+	while ((msgSz = dataTrans.Receive(msg, MAX_BUFFER, 0)) > 0)
+	{
+		msg[msgSz] = '\0';
+		//*os << msg;
+		outputMsg.push_back(msg);
+	}
+
+	// nhận phản hồi từ server
+	if ((msgSz = controlSock.Receive(msg, MAX_BUFFER, 0)) <= 0)
+	{
+		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
+		outputControlMsg.push(msg);
+		return FALSE;
 	}
 
 	msg[msgSz] = '\0';
 	outputControlMsg.push(msg);
 
-	bool isFull = false;
-	if ((CString(msg)).Find("\r\n") != msgSz - 2)
-		isFull = true;
+	// kiểm tra code của phàn hồi, 
+	if (getRelyCode(msg) != 226)	// "226 Transfer complete ...."
+		return FALSE;
 
-	if (isPassive)
-	{
-		if (!dataTrans.Connect(serverIP.GetString(), serverPort))
-		{
-			sprintf_s(msg, "%s %d\n", "Error code: ", dataTrans.GetLastError());
-			outputControlMsg.push(CString(msg));
-			return false;
-		}
-	}
 
-	int relyCode = getRelyCode(msg);
-	if (relyCode != 150 && relyCode != 125)
-		return false;
-
-	// Nhận data ở cả active và passive
-	char data[MAX_BUFFER] = { 0 };
-	int dataSz;
-	while ((dataSz = dataTrans.Receive(data, MAX_BUFFER - 1)) > 0)
-	{
-		if (dataSz == MAX_BUFFER - 1)
-			outputMsg.push(data);
-		else
-		{
-			data[dataSz - 2] = '\n';
-			data[dataSz - 1] = '\0';
-			outputMsg.push(data);
-			break;
-		}
-	}
-
-	dataTrans.Close();
 	if (!isPassive)
 		dataSock.Close();
-	
-	if (!isFull)
-	{
-		if ((msgSz = controlSock.Receive(msg, MAX_BUFFER)) <= 0) {
-			sprintf_s(msg, "%s %d\n", "Error code: ", controlSock.GetLastError());
-			outputControlMsg.push(CString(msg));
-			return false;
-		}
-		msg[msgSz] = '\0';
-		outputControlMsg.push(msg);
-	}
+	dataTrans.Close();
 
-	return true;
+	//isPassive = FALSE;		// trở lại chế độ active (mặc định)
+
+	return TRUE;
 }
 
 BOOL FTPConnection::LocalChangeDir(const char * directory)
@@ -361,11 +361,32 @@ BOOL FTPConnection::LocalChangeDir(const char * directory)
 		GetCurrentDirectory(MAX_PATH, currentDir.GetBuffer(MAX_PATH));
 		currentDir.ReleaseBuffer();
 		msg.Format("Local directory now %s\n", currentDir);
-		outputMsg.push(msg);
+		outputControlMsg.push(msg);
 		return TRUE;
 	}
 
 	msg.Format("%s: File not found\n", directory);
-	outputMsg.push(msg);
+	outputControlMsg.push(msg);
 	return FALSE;
+}
+
+//void FTPConnection::PrintControlMsg()
+//{
+//	while (!this->outputControlMsg.empty())
+//	{
+//		cout << this->outputControlMsg.front();
+//		this->outputControlMsg.pop();
+//	}
+//
+//	while (!this->outputMsg.empty())
+//	{
+//		cout << this->outputMsg.front();
+//		this->outputMsg.pop();
+//	}
+//}
+
+void FTPConnection::SetPassiveMode()
+{
+	isPassive = true;
+	outputControlMsg.push("Passive mode on.\n");
 }
