@@ -77,6 +77,7 @@ FTPConnection::FTPConnection()
 	// CSIDL_PROFILE chính là hằng số đại diện đường dẫn trên
 	SHGetSpecialFolderPath(NULL, currentDir.GetBuffer(MAX_PATH), CSIDL_PROFILE, FALSE);
 	currentDir.ReleaseBuffer();
+	SetCurrentDirectory(currentDir);
 }
 
 FTPConnection::~FTPConnection()
