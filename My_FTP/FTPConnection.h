@@ -22,8 +22,8 @@ private:
 	UINT server_data_port;
 
 	bool isPassive;											//Đang ở mode Active hay Passive
+	void close_data_sock();
 
-	bool isPath(const CString& s);
 public:
 	FTPConnection();
 	~FTPConnection();
@@ -38,6 +38,7 @@ public:
 															//trong quá trình gọi hàm
 	//void PrintControlMsg();
 	void SetPassiveMode();
+	BOOL GetFile(const CString& remote_file_name, const CString& local_file_name);
 };															
 
 

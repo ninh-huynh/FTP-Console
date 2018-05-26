@@ -62,9 +62,11 @@ BOOL FTPConnection::InitDataSock()
 	return true;
 }
 
-bool FTPConnection::isPath(const CString& s)
+void FTPConnection::close_data_sock()
 {
-	return (s.Find(_T('/')) != -1) || (s.Find('\\') != -1);
+	if (!isPassive)
+		dataSock.Close();
+	dataTrans.Close();
 }
 
 FTPConnection::FTPConnection()
@@ -259,13 +261,13 @@ BOOL FTPConnection::ListAllFile(const CString& remote_dir, const CString& local_
 
 	// thiết lập kết nối nếu ở chế độ active (mặc định)
 	InitDataSock();
-	
 
 	// Gửi lệnh NLST cho server
 	if (controlSock.Send(msg, strlen(msg), 0) <= 0)
 	{
 		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
 		outputControlMsg.push(msg);
+		close_data_sock();
 		return FALSE;
 	}
 
@@ -274,15 +276,16 @@ BOOL FTPConnection::ListAllFile(const CString& remote_dir, const CString& local_
 	{
 		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
 		outputControlMsg.push(msg);
+		close_data_sock();
 		return FALSE;
 	}
 
 	msg[msgSz] = '\0';
 	outputControlMsg.push(msg);
-	// kiểm tra code phản hồi, "150 Opening ASCII mode data connection for NLIST (773 bytes)"
+	// kiểm tra code phản hồi, "150 Opening ASCII mode data connection for NLIST ..."
 	if (getRelyCode(msg) != 150)
 	{
-		//outputControlMsg.push(msg);
+		close_data_sock();
 		return FALSE;
 	}
 
@@ -303,6 +306,7 @@ BOOL FTPConnection::ListAllFile(const CString& remote_dir, const CString& local_
 		{
 			sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
 			outputControlMsg.push(msg);
+			dataSock.Close();
 			return FALSE;
 		}
 
@@ -322,6 +326,7 @@ BOOL FTPConnection::ListAllFile(const CString& remote_dir, const CString& local_
 	{
 		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
 		outputControlMsg.push(msg);
+		close_data_sock();
 		return FALSE;
 	}
 
@@ -330,14 +335,12 @@ BOOL FTPConnection::ListAllFile(const CString& remote_dir, const CString& local_
 
 	// kiểm tra code của phàn hồi, 
 	if (getRelyCode(msg) != 226)	// "226 Transfer complete ...."
+	{
+		close_data_sock();
 		return FALSE;
+	}
 
-
-	if (!isPassive)
-		dataSock.Close();
-	dataTrans.Close();
-
-	//isPassive = FALSE;		// trở lại chế độ active (mặc định)
+	close_data_sock();
 
 	return TRUE;
 }
@@ -389,4 +392,100 @@ void FTPConnection::SetPassiveMode()
 {
 	isPassive = true;
 	outputControlMsg.push("Passive mode on.\n");
+}
+
+BOOL FTPConnection::GetFile(const CString& remote_file_name, const CString& local_file_name)
+{
+	CFile local_file;
+	char msg[MAX_BUFFER + 1]{ 0 };
+	int msgSz;
+
+	// khởi tạo kết nối data
+	if (!InitDataSock())
+		return FALSE;
+
+	// Gửi lệnh lấy 1 file (RETR remote-file)
+	sprintf_s(msg, "RETR %s\r\n", remote_file_name);
+	if (controlSock.Send(msg, strlen(msg), 0) <= 0)
+	{
+		outputControlMsg.push(msg);
+		close_data_sock();
+		return FALSE;
+	}
+
+	// nhận phản hồi từ control port
+	if ((msgSz = controlSock.Receive(msg, MAX_BUFFER, 0)) <= 0)
+	{
+		outputControlMsg.push(msg);
+		close_data_sock();
+		return FALSE;
+	}
+
+	msg[msgSz] = '\0';
+	outputControlMsg.push(msg);
+
+	if (getRelyCode(msg) != 150)		//"150 Opening BINARY mode data connection for ...."
+	{
+		close_data_sock();
+		return FALSE;
+	}
+
+	// đã nhận được phản hồi đúng từ server
+	// tạo file rỗng tại client
+	if (!local_file.Open(local_file_name, CFile::modeCreate | CFile::modeWrite | CFile::typeBinary))
+	{
+		outputControlMsg.push("Cannot create local file");
+		return FALSE;
+	}
+
+	// thiết lập kết nối cho data socket
+	if (isPassive)
+	{
+		CString server_ip;
+		UINT dummy;
+		controlSock.GetPeerName(server_ip, dummy);
+		dataTrans.Create();
+		dataTrans.Connect(server_ip, server_data_port);
+	}
+	else
+	{
+		if (!dataSock.Listen(1))
+		{
+			sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
+			outputControlMsg.push(msg);
+			dataSock.Close();
+			return FALSE;
+		}
+
+		dataSock.Accept(dataTrans);
+	}
+
+	// bắt đầu nhận phản hồi từ data port (dữ liệu của file)
+	while ((msgSz = dataTrans.Receive(msg, MAX_BUFFER, 0)) > 0)
+	{
+		local_file.Write(msg, msgSz);
+	}
+
+	// nhận phản hồi từ server
+	if ((msgSz = controlSock.Receive(msg, MAX_BUFFER, 0)) <= 0)
+	{
+		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
+		outputControlMsg.push(msg);
+		close_data_sock();
+		return FALSE;
+	}
+
+	msg[msgSz] = '\0';
+	outputControlMsg.push(msg);
+
+	// kiểm tra code của phản hồi, 
+	if (getRelyCode(msg) != 226)	// "226 Transfer complete ...."
+	{
+		close_data_sock();
+		return FALSE;
+	}
+
+	close_data_sock();
+
+	return TRUE;
 }
