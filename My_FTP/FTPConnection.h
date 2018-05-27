@@ -7,7 +7,7 @@
 #include <fstream>
 #include <vector>
 
-#define MAX_BUFFER 255			//1461
+#define MAX_MSG_BUF 255			//1461
 #define MAX_TRANSFER 4096
 
 using namespace std;
