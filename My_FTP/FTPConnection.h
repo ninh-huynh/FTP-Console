@@ -14,16 +14,26 @@ using namespace std;
 
 class FTPConnection
 {
+public:
+
+	enum Mode
+	{
+		ASCII,
+		BINARY
+	};
+
 private:
 	CSocket controlSock;									//Socket chính, kết nối tới port 21 trên Server
-	CSocket dataSock;										
+	CSocket dataSock;
 	CSocket dataTrans;
-	CString clientIPAddr;		
+	CString clientIPAddr;
 	CString currentDir;
 	UINT server_data_port;
 
 	bool isPassive;											//Đang ở mode Active hay Passive
+	Mode currentMode;
 	void close_data_sock();
+
 
 public:
 	FTPConnection();
@@ -40,9 +50,10 @@ public:
 	vector<CString> outputMsg;
 	queue<CString> outputControlMsg;						//Hàng đợi chứa thông điệp nhận được, lỗi,...
 															//trong quá trình gọi hàm
-	//void PrintControlMsg();
+															//void PrintControlMsg();
 	void SetPassiveMode();
 	BOOL GetFile(const CString& remote_file_name, const CString& local_file_name);
-};															
+	BOOL SetMode(FTPConnection::Mode mode);
+};
 
 

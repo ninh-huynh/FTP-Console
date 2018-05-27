@@ -8,12 +8,12 @@ int getRelyCode(const char *relyMsg)
 	return RelyCode;
 }
 
-void splitLineToVector(const char *src,vector<CString> &des)
+void splitLineToVector(const char *src, vector<CString> &des)
 {
 	static CString buff;
 	buff += src;
 	int length = buff.Find("\r\n");
-	
+
 	while (length != -1)
 	{
 		des.push_back(buff.Left(length + 2));
@@ -26,7 +26,7 @@ void splitLineToVector(const char *src,vector<CString> &des)
 
 BOOL FTPConnection::InitDataSock()
 {
-	char msg[MAX_BUFFER]{0};
+	char msg[MAX_BUFFER]{ 0 };
 	int msgSz;
 
 	if (isPassive)
@@ -150,7 +150,7 @@ BOOL FTPConnection::OpenConnection(const char * IPAddr)
 	UINT clientControlPort;
 	controlSock.GetSockName(clientIPAddr, clientControlPort);
 
-	if ((msgSz = controlSock.Receive(msg, MAX_BUFFER)) <= 0){
+	if ((msgSz = controlSock.Receive(msg, MAX_BUFFER)) <= 0) {
 		sprintf_s(msg, "%s %d\n", "Error code: ", controlSock.GetLastError());
 		outputControlMsg.push(CString(msg));
 		return FALSE;
@@ -166,10 +166,10 @@ BOOL FTPConnection::OpenConnection(const char * IPAddr)
 
 /*
 * Đăng nhập vào FTP server (chỉ khi đã thiết lập kết nối thành công)
-* 
+*
 * @userName : tên người dùng
 * @userPass : mật khẩu
-* 
+*
 * @Khi được gọi thì chỉ truyền 1 trong 2 tham số trên, ko truyền
 * thời do có tương tác sau lần nhập tên
 *
@@ -201,7 +201,7 @@ BOOL FTPConnection::LogIn(const char * userName, const char * userPass)
 
 	if (getRelyCode(msg) != 331)
 		return FALSE;
-	
+
 	sprintf_s(msg, "PASS %s\r\n", userPass);
 	msgSz = strlen(msg);
 	msg[msgSz] = '\0';
@@ -237,7 +237,7 @@ BOOL FTPConnection::Close()
 
 	sprintf_s(msg, "QUIT\r\n");
 	msgSz = strlen(msg);
-	
+
 	if (controlSock.Send(&msg, msgSz) <= 0) {
 		sprintf_s(msg, "%s %d\n", "Error code: ", controlSock.GetLastError());
 		outputControlMsg.push(CString(msg));
@@ -260,20 +260,20 @@ BOOL FTPConnection::Close()
 }
 
 /**
- * - Hàm lấy thông tin danh sách file từ remote-directory (lệnh "LS")
- * - Cú pháp sử dụng (ví dụ):
- *   + ls abc.*
- *   + ls *.abc
- *   + ls /a/b/c abc.txt	(lưu vào currentDir trên client)
- *   + ls /a/b/c path		(lưu vào path)
- * 
- * 
- * @fileExt điều kiện lọc các file
- * @remote_dir thư mục muốn xem trên server
- * @local_file file/đường dẫn lưu thông tin ở client
- * 
- * @return TRUE/FALSE
- */
+* - Hàm lấy thông tin danh sách file từ remote-directory (lệnh "LS")
+* - Cú pháp sử dụng (ví dụ):
+*   + ls abc.*
+*   + ls *.abc
+*   + ls /a/b/c abc.txt	(lưu vào currentDir trên client)
+*   + ls /a/b/c path		(lưu vào path)
+*
+*
+* @fileExt điều kiện lọc các file
+* @remote_dir thư mục muốn xem trên server
+* @local_file file/đường dẫn lưu thông tin ở client
+*
+* @return TRUE/FALSE
+*/
 BOOL FTPConnection::ListAllFile(const CString& remote_dir, const CString& local_file)
 {
 	char msg[MAX_BUFFER]{ 0 };
@@ -482,7 +482,7 @@ BOOL FTPConnection::LocalChangeDir(const char * directory)
 		bRet = SetCurrentDirectory(currentDir + "\\" + directory) || SetCurrentDirectory(directory);
 	else
 		bRet = SetCurrentDirectory(currentDir);
-	
+
 	if (bRet == TRUE)
 	{
 		GetCurrentDirectory(MAX_PATH, currentDir.GetBuffer(MAX_PATH));
@@ -776,5 +776,35 @@ BOOL FTPConnection::GetFile(const CString& remote_file_name, const CString& loca
 
 	close_data_sock();
 
+	return TRUE;
+}
+
+BOOL FTPConnection::SetMode(FTPConnection::Mode mode)
+{
+	char msg[MAX_BUFFER]{ 0 };
+	int msgSz;
+
+	sprintf_s(msg, "TYPE %c\r\n", mode == ASCII ? 'A' : 'I');
+	if (controlSock.Send(msg, strlen(msg), 0) == SOCKET_ERROR)
+	{
+		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
+		outputControlMsg.push(msg);
+		return FALSE;
+	}
+
+	if ((msgSz = controlSock.Receive(msg, MAX_BUFFER, 0)) == SOCKET_ERROR)
+	{
+		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
+		outputControlMsg.push(msg);
+		return FALSE;
+	}
+
+	msg[msgSz] = '\0';
+	outputControlMsg.push(msg);
+
+	if (getRelyCode(msg) != 200)	// "200 Type set to ..."
+		return FALSE;
+
+	currentMode = mode;
 	return TRUE;
 }
