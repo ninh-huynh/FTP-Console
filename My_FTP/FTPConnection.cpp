@@ -676,8 +676,11 @@ BOOL FTPConnection::PutFile(const char * localFile, const char * remoteFile)
 
 void FTPConnection::SetPassiveMode()
 {
-	isPassive = true;
-	outputControlMsg.push("Passive mode on.\n");
+	isPassive = !isPassive;
+	if (isPassive)
+		outputControlMsg.push("Passive mode on.\n");
+	else
+		outputControlMsg.push("Passive mode off.\n");
 }
 
 BOOL FTPConnection::GetFile(const CString& remote_file_name, const CString& local_file_name)
@@ -691,7 +694,7 @@ BOOL FTPConnection::GetFile(const CString& remote_file_name, const CString& loca
 		return FALSE;
 
 	// Gửi lệnh lấy 1 file (RETR remote-file)
-	sprintf_s(msg, "RETR %s\r\n", remote_file_name);
+	sprintf_s(msg, "RETR %s\r\n", remote_file_name.GetString());
 	if (controlSock.Send(msg, strlen(msg), 0) <= 0)
 	{
 		outputControlMsg.push(msg);
@@ -747,7 +750,7 @@ BOOL FTPConnection::GetFile(const CString& remote_file_name, const CString& loca
 	}
 
 	// bắt đầu nhận phản hồi từ data port (dữ liệu của file)
-	while ((msgSz = dataTrans.Receive(msg, MAX_BUFFER, 0)) > 0)
+	while ((msgSz = dataTrans.Receive(msg, MAX_TRANSFER, 0)) > 0)
 	{
 		local_file.Write(msg, msgSz);
 	}
