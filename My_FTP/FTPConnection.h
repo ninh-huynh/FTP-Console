@@ -6,6 +6,7 @@
 #include <memory>
 #include <fstream>
 #include <vector>
+#include <map>
 
 #define MAX_MSG_BUF 255			//1461
 #define MAX_TRANSFER 4096
