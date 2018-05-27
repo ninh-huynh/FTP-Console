@@ -33,6 +33,8 @@ private:
 	bool isPassive;											//Đang ở mode Active hay Passive
 	Mode currentMode;
 	void close_data_sock();
+	bool is_extension(const CString& s);
+	CString get_file_name(const CString& s);
 
 
 public:
@@ -53,6 +55,7 @@ public:
 															//void PrintControlMsg();
 	void SetPassiveMode();
 	BOOL GetFile(const CString& remote_file_name, const CString& local_file_name);
+	BOOL GetMultipleFiles(const vector<CString>& remote_file_name);
 	BOOL SetMode(FTPConnection::Mode mode);
 };
 

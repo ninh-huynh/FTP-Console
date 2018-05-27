@@ -16,7 +16,7 @@ void splitLineToVector(const char *src, vector<CString> &des)
 
 	while (length != -1)
 	{
-		des.push_back(buff.Left(length + 2));
+		des.push_back(buff.Left(length));
 		buff.Delete(0, length + 2);
 		length = buff.Find("\r\n");
 	}
@@ -88,6 +88,19 @@ void FTPConnection::close_data_sock()
 	dataTrans.Close();
 }
 
+bool FTPConnection::is_extension(const CString& s)
+{
+	return s.Find(_T("*.")) || s.Find(".*");
+}
+
+CString FTPConnection::get_file_name(const CString& s)
+{
+	if (s.Find(_T('/')) == -1)
+		return s;
+
+	return s.Right(s.GetLength() - s.Find('/') - 1);
+}
+
 FTPConnection::FTPConnection()
 {
 	if (!AfxSocketInit()) {
@@ -100,6 +113,7 @@ FTPConnection::FTPConnection()
 	currentDir.ReleaseBuffer();
 	SetCurrentDirectory(currentDir);
 	isPassive = false;
+	currentMode = Mode::ASCII;
 }
 
 FTPConnection::~FTPConnection()
@@ -781,6 +795,44 @@ BOOL FTPConnection::GetFile(const CString& remote_file_name, const CString& loca
 
 	local_file.Close();
 	close_data_sock();
+
+	return TRUE;
+}
+
+BOOL FTPConnection::GetMultipleFiles(const vector<CString>& remote_file_name)
+{
+	char msg[MAX_MSG_BUF + 1]{ 0 }, data[MAX_TRANSFER]{ 0 };
+	int msgSz, dataSz;
+	CFile local_file;
+
+	for (const auto& elm : remote_file_name)
+	{
+		if (!ListAllFile(elm, ""))
+		{
+			while (outputControlMsg.size() > 1)		// vứt hết tất cả ra ngoại trừ thông báo sau cùng
+				outputControlMsg.pop();
+			outputControlMsg.push("Cannot find list of remote files.");
+
+			// vứt hết thông tin trong danh sách file ra
+			outputMsg.clear();
+
+			return FALSE;
+		}
+	}
+
+	// clear outputControlMsg
+	decltype(outputControlMsg) dummy;
+	outputControlMsg.swap(dummy);
+
+	// set chế độ truyền
+	SetMode(currentMode);
+
+	// bắt đầu tải từng file trên server
+	for (const auto& elm : outputMsg)
+	{
+		if (!GetFile(elm, get_file_name(elm)))
+			return FALSE;
+	}
 
 	return TRUE;
 }
