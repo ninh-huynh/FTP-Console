@@ -1026,3 +1026,67 @@ BOOL FTPConnection::PrintRemoteWorkingDir()
 
 	return TRUE;
 }
+
+BOOL FTPConnection::PutMultipleFiles(const vector<CString>& localFile)
+{
+	// Thiết lập chế độ truyền
+	//SetMode(currentMode);
+
+	// Tham số có 2 dạng:
+	// *.ext
+	// file1.ext1 file2.ext2 ...
+
+	//Duyệt tìm trong thư mục hiện hành tên các file ấy
+	//nếu tồn tại -> upload lên server
+	//không tồn tại thì bỏ qua, duyệt tên tiếp theo
+	BOOL bRet = TRUE;
+
+	WIN32_FIND_DATA fdFile;
+	HANDLE hFind = nullptr;
+	char sPath[256];
+	
+	for (auto it : localFile)
+	{
+		// Xóa các dấu * có trong chuỗi
+
+		// *.ext  -> .ext
+		// name.* -> name.
+		// *.*    -> .
+
+		CString fileName = it;
+		int pos;
+		while ((pos = fileName.Find('*')) != -1)
+		{
+			fileName.Delete(pos);
+		}
+
+		sprintf_s(sPath, "%s\\*.*", currentDir);
+		hFind = FindFirstFile(sPath, &fdFile);
+
+		do
+		{
+			if (!strcmp(fdFile.cFileName, "."))						//Tìm được file ẩn
+				continue;
+
+			if (!strcmp(fdFile.cFileName, ".."))					//Tìm được thư mục ẩn
+				continue;
+
+			if (fdFile.dwFileAttributes &FILE_ATTRIBUTE_DIRECTORY)	//Tìm được tên thư mục
+				continue;
+
+			// Tìm được 1 tập tin
+
+			// Tìm sự xuất hiện của chuỗi fileName
+			// trong các file ở currentDir
+			if (strstr(fdFile.cFileName, fileName) == nullptr)
+				continue;
+				
+			if (!PutFile(fdFile.cFileName, fdFile.cFileName))
+				bRet = FALSE;
+
+		} while (FindNextFile(hFind, &fdFile));
+		FindClose(hFind);
+	}
+	
+	return bRet;
+}
