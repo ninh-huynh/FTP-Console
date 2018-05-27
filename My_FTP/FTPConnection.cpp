@@ -800,13 +800,13 @@ BOOL FTPConnection::GetFile(const CString& remote_file_name, const CString& loca
 	return TRUE;
 }
 
-BOOL FTPConnection::GetMultipleFiles(const vector<CString>& remote_file_name)
+BOOL FTPConnection::GetMultipleFiles(const vector<CString>& remote_file_names)
 {
-	char msg[MAX_MSG_BUF + 1]{ 0 }, data[MAX_TRANSFER]{ 0 };
-	int msgSz, dataSz;
+	char msg[MAX_MSG_BUF + 1]{ 0 };
+	int msgSz;
 	CFile local_file;
 
-	for (const auto& elm : remote_file_name)
+	for (const auto& elm : remote_file_names)
 	{
 		if (!ListAllFile(elm, ""))
 		{
@@ -926,4 +926,42 @@ BOOL FTPConnection::RemoveFile(const CString& remote_file_name)
 		return FALSE;
 
 	return true;
+}
+
+BOOL FTPConnection::RemoveMultipleFiles(const vector<CString>& remote_file_names)
+{
+	char msg[MAX_MSG_BUF + 1]{ 0 };
+	int msgSz;
+	CFile local_file;
+
+	for (const auto& elm : remote_file_names)
+	{
+		if (!ListAllFile(elm, ""))		// không tìm thấy tên file
+		{
+			while (outputControlMsg.size() > 1)		// vứt hết tất cả thông báo ngoại trừ thông báo sau cùng
+				outputControlMsg.pop();
+			outputControlMsg.push("Cannot find list of remote files.");
+
+			// vứt hết thông tin trong danh sách file ra
+			outputMsg.clear();
+
+			return FALSE;
+		}
+	}
+
+	// clear outputControlMsg
+	decltype(outputControlMsg) dummy;
+	outputControlMsg.swap(dummy);
+
+	// set chế độ truyền
+	SetMode(currentMode);
+
+	// bắt đầu tải từng file trên server
+	for (const auto& elm : outputMsg)
+	{
+		if (!RemoveFile(elm))
+			return FALSE;
+	}
+
+	return TRUE;
 }

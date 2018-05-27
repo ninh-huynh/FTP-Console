@@ -55,10 +55,11 @@ public:
 															//void PrintControlMsg();
 	void SetPassiveMode();
 	BOOL GetFile(const CString& remote_file_name, const CString& local_file_name);
-	BOOL GetMultipleFiles(const vector<CString>& remote_file_name);
+	BOOL GetMultipleFiles(const vector<CString>& remote_file_names);
 	BOOL SetMode(FTPConnection::Mode mode);
 	BOOL ChangeRemoteDir(const CString& dir);
 	BOOL RemoveFile(const CString& remote_file_name);
+	BOOL RemoveMultipleFiles(const vector<CString>& remote_file_names);
 };
 
 
