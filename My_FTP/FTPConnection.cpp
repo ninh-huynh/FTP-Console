@@ -743,7 +743,8 @@ BOOL FTPConnection::GetFile(const CString& remote_file_name, const CString& loca
 	// tạo file rỗng tại client
 	if (!local_file.Open(local_file_name, CFile::modeCreate | CFile::modeWrite | CFile::typeBinary))
 	{
-		outputControlMsg.push("Cannot create local file\r\n");
+		sprintf_s(msg, "Cannot create local file: %s\n", local_file_name);
+		outputControlMsg.push(msg);
 		return FALSE;
 	}
 
@@ -865,4 +866,34 @@ BOOL FTPConnection::SetMode(FTPConnection::Mode mode)
 
 	currentMode = mode;
 	return TRUE;
+}
+
+BOOL FTPConnection::ChangeRemoteDir(const CString& dir)
+{
+	char msg[MAX_MSG_BUF + 1]{ 0 };
+	int msgSz;
+
+	sprintf_s(msg, "CWD %s\r\n", dir.GetString());
+
+	if (controlSock.Send(msg, strlen(msg), 0) == SOCKET_ERROR)
+	{
+		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
+		outputControlMsg.push(msg);
+		return FALSE;
+	}
+
+	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF, 0)) == SOCKET_ERROR)
+	{
+		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
+		outputControlMsg.push(msg);
+		return FALSE;
+	}
+
+	msg[msgSz] = '\0';
+	outputControlMsg.push(msg);
+
+	if (getRelyCode(msg) != 250)	//"250 Directory successfully changed"
+		return FALSE;
+
+	return true;
 }
