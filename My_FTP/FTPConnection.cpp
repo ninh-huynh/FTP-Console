@@ -123,9 +123,12 @@ BOOL FTPConnection::OpenConnection(const char * IPAddr)
 		outputControlMsg.push(CString(msg));
 	}
 
-	auto isValidIPAddr = [](const char *IPAddr) {
+	auto isValidIPAddr = [](const char *IPAddr) -> bool
+	{
 		UINT a, b, c, d;
-		return sscanf_s(IPAddr, "%d.%d.%d.%d", &a, &b, &c, &d) == 4;
+		if (sscanf_s(IPAddr, "%u.%u.%u.%u", &a, &b, &c, &d) != 4)
+			return false;
+		return a < 256 && b < 256 && c < 256 && d < 256;
 	};
 
 	if (!isValidIPAddr(IPAddr)) {
