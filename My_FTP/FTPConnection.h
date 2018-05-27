@@ -42,7 +42,7 @@ public:
 	~FTPConnection();
 	BOOL OpenConnection(const char* IPAddr);				//Thiết lập kết nối tới Server
 	BOOL LogIn(const char *userName, const char *userPass);	//Truyền cả 2 tham số, đã sửa lại!
-	BOOL InitDataSock();							//Thiết lập kết nối TCP
+	BOOL InitDataSock();							//Thiết lập kết nối TCP cho data socket
 	BOOL Close();
 	BOOL ListAllFile(const CString& remote_dir, const CString& local_file);
 	BOOL ListAllDirectory(const char *remote_dir, const char *local_file);
@@ -57,10 +57,11 @@ public:
 	BOOL GetFile(const CString& remote_file_name, const CString& local_file_name);
 	BOOL GetMultipleFiles(const vector<CString>& remote_file_names);
 	BOOL SetMode(FTPConnection::Mode mode);
-	BOOL ChangeRemoteDir(const CString& dir);
-	BOOL RemoveFile(const CString& remote_file_name);
-	BOOL RemoveMultipleFiles(const vector<CString>& remote_file_names);
-	BOOL RemoveDir(const CString& remote_dir);
+	BOOL ChangeRemoteWorkingDir(const CString& dir);
+	BOOL DeleteRemoteFile(const CString& remote_file_name);
+	BOOL DeleteRemoteMultipleFiles(const vector<CString>& remote_file_names);
+	BOOL RemoveRemoteDir(const CString& remote_dir);
+	BOOL PrintRemoteWorkingDir();
 };
 
 

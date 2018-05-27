@@ -868,7 +868,7 @@ BOOL FTPConnection::SetMode(FTPConnection::Mode mode)
 	return TRUE;
 }
 
-BOOL FTPConnection::ChangeRemoteDir(const CString& dir)
+BOOL FTPConnection::ChangeRemoteWorkingDir(const CString& dir)
 {
 	char msg[MAX_MSG_BUF + 1]{ 0 };
 	int msgSz;
@@ -898,7 +898,7 @@ BOOL FTPConnection::ChangeRemoteDir(const CString& dir)
 	return true;
 }
 
-BOOL FTPConnection::RemoveFile(const CString& remote_file_name)
+BOOL FTPConnection::DeleteRemoteFile(const CString& remote_file_name)
 {
 	char msg[MAX_MSG_BUF + 1]{ 0 };
 	int msgSz;
@@ -928,7 +928,7 @@ BOOL FTPConnection::RemoveFile(const CString& remote_file_name)
 	return TRUE;
 }
 
-BOOL FTPConnection::RemoveMultipleFiles(const vector<CString>& remote_file_names)
+BOOL FTPConnection::DeleteRemoteMultipleFiles(const vector<CString>& remote_file_names)
 {
 	char msg[MAX_MSG_BUF + 1]{ 0 };
 	int msgSz;
@@ -959,14 +959,14 @@ BOOL FTPConnection::RemoveMultipleFiles(const vector<CString>& remote_file_names
 	// bắt đầu tải từng file trên server
 	for (const auto& elm : outputMsg)
 	{
-		if (!RemoveFile(elm))
+		if (!DeleteRemoteFile(elm))
 			return FALSE;
 	}
 
 	return TRUE;
 }
 
-BOOL FTPConnection::RemoveDir(const CString& remote_dir)
+BOOL FTPConnection::RemoveRemoteDir(const CString& remote_dir)
 {
 	char msg[MAX_MSG_BUF + 1]{ 0 };
 	int msgSz;
@@ -991,6 +991,36 @@ BOOL FTPConnection::RemoveDir(const CString& remote_dir)
 	outputControlMsg.push(msg);
 
 	if (getRelyCode(msg) != 250)	//"250 Directory removed"
+		return FALSE;
+
+	return TRUE;
+}
+
+BOOL FTPConnection::PrintRemoteWorkingDir()
+{
+	char msg[MAX_MSG_BUF + 1]{ 0 };
+	int msgSz;
+
+	strcpy_s(msg, "PWD\r\n");
+
+	if (controlSock.Send(msg, strlen(msg), 0) == SOCKET_ERROR)
+	{
+		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
+		outputControlMsg.push(msg);
+		return FALSE;
+	}
+
+	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF, 0)) == SOCKET_ERROR)
+	{
+		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
+		outputControlMsg.push(msg);
+		return FALSE;
+	}
+
+	msg[msgSz] = '\0';
+	outputControlMsg.push(msg);
+
+	if (getRelyCode(msg) != 257)	//"257 /..."
 		return FALSE;
 
 	return TRUE;
