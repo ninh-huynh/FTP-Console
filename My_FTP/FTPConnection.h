@@ -60,6 +60,7 @@ public:
 	BOOL ChangeRemoteDir(const CString& dir);
 	BOOL RemoveFile(const CString& remote_file_name);
 	BOOL RemoveMultipleFiles(const vector<CString>& remote_file_names);
+	BOOL RemoveDir(const CString& remote_dir);
 };
 
 
