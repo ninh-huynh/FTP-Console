@@ -58,6 +58,7 @@ public:
 	BOOL GetMultipleFiles(const vector<CString>& remote_file_name);
 	BOOL SetMode(FTPConnection::Mode mode);
 	BOOL ChangeRemoteDir(const CString& dir);
+	BOOL RemoveFile(const CString& remote_file_name);
 };
 
 

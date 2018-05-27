@@ -897,3 +897,33 @@ BOOL FTPConnection::ChangeRemoteDir(const CString& dir)
 
 	return true;
 }
+
+BOOL FTPConnection::RemoveFile(const CString& remote_file_name)
+{
+	char msg[MAX_MSG_BUF + 1]{ 0 };
+	int msgSz;
+
+	sprintf_s(msg, "DELE %s\r\n", remote_file_name.GetString());
+
+	if (controlSock.Send(msg, strlen(msg), 0) == SOCKET_ERROR)
+	{
+		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
+		outputControlMsg.push(msg);
+		return FALSE;
+	}
+
+	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF, 0)) == SOCKET_ERROR)
+	{
+		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
+		outputControlMsg.push(msg);
+		return FALSE;
+	}
+
+	msg[msgSz] = '\0';
+	outputControlMsg.push(msg);
+
+	if (getRelyCode(msg) != 250)	//"250 Deleted file ..."
+		return FALSE;
+
+	return true;
+}
