@@ -47,7 +47,7 @@ BOOL FTPConnection::InitDataSock()
 	}
 
 	// gửi lệnh PASV/PORT
-	if (controlSock.Send(msg, strlen(msg), 0) <= 0)
+	if (controlSock.Send(msg, strlen(msg), 0) == SOCKET_ERROR)
 	{
 		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
 		outputControlMsg.push(msg);
@@ -55,7 +55,7 @@ BOOL FTPConnection::InitDataSock()
 	}
 
 	// nhận phản hồi từ server
-	if ((msgSz = controlSock.Receive(msg, MAX_BUFFER)) <= 0)
+	if ((msgSz = controlSock.Receive(msg, MAX_BUFFER)) == SOCKET_ERROR)
 	{
 		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
 		outputControlMsg.push(msg);
@@ -276,16 +276,17 @@ BOOL FTPConnection::Close()
 */
 BOOL FTPConnection::ListAllFile(const CString& remote_dir, const CString& local_file)
 {
-	char msg[MAX_BUFFER]{ 0 };
-	int msgSz;
+	char msg[MAX_BUFFER + 1]{ 0 }, data[MAX_TRANSFER + 1]{ 0 };
+	int msgSz, dataSz;
 
 	sprintf_s(msg, "NLST %s\r\n", remote_dir.GetString());
 
 	// thiết lập kết nối nếu ở chế độ active (mặc định)
-	InitDataSock();
+	if (!InitDataSock())
+		return false;
 
 	// Gửi lệnh NLST cho server
-	if (controlSock.Send(msg, strlen(msg), 0) <= 0)
+	if (controlSock.Send(msg, strlen(msg), 0) == SOCKET_ERROR)
 	{
 		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
 		outputControlMsg.push(msg);
@@ -294,7 +295,7 @@ BOOL FTPConnection::ListAllFile(const CString& remote_dir, const CString& local_
 	}
 
 	// nhận phản hồi từ server
-	if ((msgSz = controlSock.Receive(msg, MAX_BUFFER, 0)) <= 0)
+	if ((msgSz = controlSock.Receive(msg, MAX_BUFFER, 0)) == SOCKET_ERROR)
 	{
 		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
 		outputControlMsg.push(msg);
@@ -312,14 +313,12 @@ BOOL FTPConnection::ListAllFile(const CString& remote_dir, const CString& local_
 	}
 
 	// đã nhận được phản hồi đúng từ server
-
 	// thiết lập kết nối cho data socket
 	if (isPassive)
 	{
 		CString server_ip;
 		UINT dummy;
 		controlSock.GetPeerName(server_ip, dummy);
-		dataTrans.Create();
 		dataTrans.Connect(server_ip, server_data_port);
 	}
 	else
@@ -332,18 +331,24 @@ BOOL FTPConnection::ListAllFile(const CString& remote_dir, const CString& local_
 			return FALSE;
 		}
 
-		dataSock.Accept(dataTrans);
+		if (!dataSock.Accept(dataTrans))
+		{
+			sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
+			outputControlMsg.push(msg);
+			dataSock.Close();
+			return FALSE;
+		}
 	}
 
 	// bắt đầu nhận phản hồi từ data port (thông tin danh sách file)
-	while ((msgSz = dataTrans.Receive(msg, MAX_TRANSFER - 1, 0)) > 0)
+	while ((dataSz = dataTrans.Receive(data, MAX_TRANSFER, 0)) > 0)
 	{
-		msg[msgSz] = '\0';
-		splitLineToVector(msg, outputMsg);
+		data[dataSz] = '\0';
+		splitLineToVector(data, outputMsg);
 	}
 
 	// nhận phản hồi từ server
-	if ((msgSz = controlSock.Receive(msg, MAX_BUFFER, 0)) <= 0)
+	if ((msgSz = controlSock.Receive(msg, MAX_BUFFER, 0)) == SOCKET_ERROR)
 	{
 		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
 		outputControlMsg.push(msg);
@@ -686,8 +691,8 @@ void FTPConnection::SetPassiveMode()
 BOOL FTPConnection::GetFile(const CString& remote_file_name, const CString& local_file_name)
 {
 	CFile local_file;
-	char msg[MAX_BUFFER + 1]{ 0 };
-	int msgSz;
+	char msg[MAX_BUFFER + 1]{ 0 }, data[MAX_TRANSFER]{ 0 };
+	int msgSz, dataSz;
 
 	// khởi tạo kết nối data
 	if (!InitDataSock())
@@ -703,7 +708,7 @@ BOOL FTPConnection::GetFile(const CString& remote_file_name, const CString& loca
 	}
 
 	// nhận phản hồi từ control port
-	if ((msgSz = controlSock.Receive(msg, MAX_BUFFER, 0)) <= 0)
+	if ((msgSz = controlSock.Receive(msg, MAX_BUFFER, 0)) == SOCKET_ERROR)
 	{
 		outputControlMsg.push(msg);
 		close_data_sock();
@@ -750,13 +755,13 @@ BOOL FTPConnection::GetFile(const CString& remote_file_name, const CString& loca
 	}
 
 	// bắt đầu nhận phản hồi từ data port (dữ liệu của file)
-	while ((msgSz = dataTrans.Receive(msg, MAX_TRANSFER, 0)) > 0)
+	while ((dataSz = dataTrans.Receive(data, MAX_TRANSFER, 0)) > 0)
 	{
-		local_file.Write(msg, msgSz);
+		local_file.Write(data, dataSz);
 	}
 
 	// nhận phản hồi từ server
-	if ((msgSz = controlSock.Receive(msg, MAX_BUFFER, 0)) <= 0)
+	if ((msgSz = controlSock.Receive(msg, MAX_BUFFER, 0)) == SOCKET_ERROR)
 	{
 		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
 		outputControlMsg.push(msg);
