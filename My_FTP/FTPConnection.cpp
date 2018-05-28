@@ -802,34 +802,47 @@ BOOL FTPConnection::GetFile(const CString& remote_file_name, const CString& loca
 
 BOOL FTPConnection::GetMultipleFiles(const vector<CString>& remote_file_names)
 {
-	CFile local_file;
+	vector<CString> remote_file_paths;
+	vector<CString> file_names;
+	char dir[256], buf[256];
 
+	// lần lượt tìm các file trong danh sách, nếu có 1 file nào đó không tồn tại => return
 	for (const auto& elm : remote_file_names)
 	{
 		if (!ListAllFile(elm, ""))
 		{
 			while (outputControlMsg.size() > 1)		// vứt hết tất cả ra ngoại trừ thông báo sau cùng
 				outputControlMsg.pop();
-			outputControlMsg.push("Cannot find list of remote files.");
-
-			// vứt hết thông tin trong danh sách file ra
-			outputMsg.clear();
+			sprintf_s(buf, "Cannot find \"%s\".\n", elm);
+			outputControlMsg.push(buf);
 
 			return FALSE;
 		}
+		else
+		{
+			_splitpath_s(elm, NULL, 0, dir, 255, NULL, 0, NULL, 0);
+			file_names.insert(end(file_names), begin(outputMsg), end(outputMsg));
+			for (const auto& file_name : outputMsg)
+			{
+				remote_file_paths.push_back(dir + file_name);
+			}
+		}
+
+		// vứt hết thông tin trong danh sách file ra
+		outputMsg.clear();
 	}
 
 	// clear outputControlMsg
 	decltype(outputControlMsg) dummy;
-	outputControlMsg.swap(dummy);
+	swap(outputControlMsg, dummy);
 
 	// set chế độ truyền
 	SetMode(currentMode);
 
 	// bắt đầu tải từng file trên server
-	for (const auto& elm : outputMsg)
+	for (int i = 0; i < remote_file_paths.size(); ++i)
 	{
-		if (!GetFile(elm, get_file_name(elm)))
+		if (!GetFile(remote_file_paths[i], file_names[i]))
 			return FALSE;
 	}
 
@@ -928,34 +941,45 @@ BOOL FTPConnection::DeleteRemoteFile(const CString& remote_file_name)
 
 BOOL FTPConnection::DeleteRemoteMultipleFiles(const vector<CString>& remote_file_names)
 {
-	CFile local_file;
+	vector<CString> remote_file_paths;
+	char dir[256], buf[256];
 
+	// lần lượt tìm các file trong danh sách, nếu có 1 file nào đó không tồn tại => return
 	for (const auto& elm : remote_file_names)
 	{
-		if (!ListAllFile(elm, ""))		// không tìm thấy tên file
+		if (!ListAllFile(elm, ""))
 		{
-			while (outputControlMsg.size() > 1)		// vứt hết tất cả thông báo ngoại trừ thông báo sau cùng
+			while (outputControlMsg.size() > 1)		// vứt hết tất cả ra ngoại trừ thông báo sau cùng
 				outputControlMsg.pop();
-			outputControlMsg.push("Cannot find list of remote files.\n");
-
-			// vứt hết thông tin trong danh sách file ra
-			outputMsg.clear();
+			sprintf_s(buf, "Cannot find \"%s\".\n", elm);
+			outputControlMsg.push(buf);
 
 			return FALSE;
 		}
+		else
+		{
+			_splitpath_s(elm, NULL, 0, dir, 255, NULL, 0, NULL, 0);
+			for (const auto& file_name : outputMsg)
+			{
+				remote_file_paths.push_back(dir + file_name);
+			}
+		}
+
+		// vứt hết thông tin trong danh sách file ra
+		outputMsg.clear();
 	}
 
 	// clear outputControlMsg
 	decltype(outputControlMsg) dummy;
-	outputControlMsg.swap(dummy);
+	swap(outputControlMsg, dummy);
 
 	// set chế độ truyền
 	SetMode(currentMode);
 
-	// bắt đầu tải từng file trên server
-	for (const auto& elm : outputMsg)
+	// bắt đầu xóa từng file trên server
+	for (int i = 0; i < remote_file_paths.size(); ++i)
 	{
-		if (!DeleteRemoteFile(elm))
+		if (!DeleteRemoteFile(remote_file_paths[i]))
 			return FALSE;
 	}
 
