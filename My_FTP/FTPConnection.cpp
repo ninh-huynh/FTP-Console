@@ -1112,3 +1112,16 @@ BOOL FTPConnection::PutMultipleFiles(const vector<CString>& localFile)
 
 	return bRet;
 }
+
+void FTPConnection::Help()
+{
+
+	outputMsg = 
+	{ "?", "open", "user", "ls", "dir", "quit", 
+		"get", "mget", "put", "lcd", "delete", 
+		"mdelete", "passive", "close","mkdir", 
+		"mput", "ascii", "binary", "cd", "rmdir", "pwd", "!", "help"};
+
+	sort(begin(outputMsg), end(outputMsg), [](const CString& a, const CString& b) {return a < b; });
+
+}

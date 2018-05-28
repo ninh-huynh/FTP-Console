@@ -64,6 +64,7 @@ public:
 	BOOL RemoveRemoteDir(const CString& remote_dir);
 	BOOL PrintRemoteWorkingDir();
 	BOOL PutMultipleFiles(const vector<CString> &localFile);
+	void Help();
 };
 
 
