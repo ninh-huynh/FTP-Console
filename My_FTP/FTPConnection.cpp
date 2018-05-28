@@ -93,14 +93,6 @@ bool FTPConnection::is_extension(const CString& s)
 	return s.Find(_T("*.")) || s.Find(".*");
 }
 
-CString FTPConnection::get_file_name(const CString& s)
-{
-	if (s.Find(_T('/')) == -1)
-		return s;
-
-	return s.Right(s.GetLength() - s.Find('/') - 1);
-}
-
 CString FTPConnection::get_path(const CString & fullPath)
 {
 	char drive[_MAX_DRIVE];
@@ -1102,7 +1094,7 @@ BOOL FTPConnection::PutMultipleFiles(const vector<CString>& localFile)
 	for (auto it : localFile)
 	{
 
-		sprintf_s(sPath, "%s%s", get_path(it).GetString(), get_file_name(it).GetString());
+		sprintf_s(sPath, "%s%s", get_path(it).GetString(), get_fileName_with_Ext(it).GetString());
 
 		WIN32_FIND_DATA fdFile;
 		HANDLE hFind = nullptr;

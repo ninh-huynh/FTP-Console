@@ -35,7 +35,6 @@ private:
 	Mode currentMode;
 	void close_data_sock();
 	bool is_extension(const CString& s);
-	CString get_file_name(const CString& s);
 	CString get_path(const CString &fullPath);
 	CString get_fileName_with_Ext(const CString &fullPath);
 
