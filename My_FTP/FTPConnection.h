@@ -36,7 +36,8 @@ private:
 	void close_data_sock();
 	bool is_extension(const CString& s);
 	CString get_file_name(const CString& s);
-
+	CString get_path(const CString &fullPath);
+	CString get_fileName_with_Ext(const CString &fullPath);
 
 public:
 	FTPConnection();
@@ -49,7 +50,7 @@ public:
 	BOOL ListAllDirectory(const char *remote_dir, const char *local_file);
 	BOOL LocalChangeDir(const char* directory);
 	BOOL CreateDir(const char* directory);
-	BOOL PutFile(const char *localFile, const char *remoteFile);
+	BOOL PutFile(const CString& localFile, const CString& remoteFile);
 	vector<CString> outputMsg;
 	queue<CString> outputControlMsg;						//Hàng đợi chứa thông điệp nhận được, lỗi,...
 															//trong quá trình gọi hàm

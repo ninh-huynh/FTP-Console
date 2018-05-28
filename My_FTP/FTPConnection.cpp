@@ -127,6 +127,41 @@ CString FTPConnection::get_file_name(const CString& s)
 	return s.Right(s.GetLength() - s.Find('/') - 1);
 }
 
+CString FTPConnection::get_path(const CString & fullPath)
+{
+	char drive[_MAX_DRIVE];
+	char dir[_MAX_DIR];
+	char fname[_MAX_FNAME];
+	char ext[_MAX_EXT];
+	
+	errno_t err;
+	err = _splitpath_s(fullPath.GetString(), drive, _MAX_DRIVE, dir, _MAX_DIR, fname, _MAX_FNAME, ext, _MAX_EXT);
+	
+	// Thiếu cả tên ổ cứng và thư mục chứa -> dùng đường dẫn hiện tại
+	if (CString(drive).IsEmpty() && CString(dir).IsEmpty())
+		return currentDir + "\\";
+
+	//Chỉ thiếu tên ổ cứng -> thư mục con của đường dẫn hiện tại
+	if (CString(drive).IsEmpty())
+		return currentDir + (CString)dir;
+
+	//Đủ cả tên ổ cứng và thư mục
+	return (CString)drive + (CString)dir;
+}
+
+CString FTPConnection::get_fileName_with_Ext(const CString & fullPath)
+{
+	char drive[_MAX_DRIVE];
+	char dir[_MAX_DIR];
+	char fname[_MAX_FNAME];
+	char ext[_MAX_EXT];
+
+	errno_t err;
+	err = _splitpath_s(fullPath.GetString(), drive, _MAX_DRIVE, dir, _MAX_DIR, fname, _MAX_FNAME, ext, _MAX_EXT);
+	
+	return (CString)fname + (CString)ext;
+}
+
 FTPConnection::FTPConnection()
 {
 	if (!AfxSocketInit()) {
@@ -571,13 +606,13 @@ BOOL FTPConnection::CreateDir(const char * directory)
 	return TRUE;
 }
 
-BOOL FTPConnection::PutFile(const char * localFile, const char * remoteFile)
+BOOL FTPConnection::PutFile(const CString& localFile, const CString& remoteFile)
 {
 	char msg[MAX_MSG_BUF];
 	int msgSz;
 
 	ifstream file;
-	file.open(localFile, ios::binary);
+	file.open(localFile.GetString(), ios::binary);
 	if (!file.is_open())												// Nếu không mở được file -> tb lỗi, thoát ngay
 	{
 		sprintf_s(msg, "%s: File not found.\r\n", localFile);
@@ -599,7 +634,12 @@ BOOL FTPConnection::PutFile(const char * localFile, const char * remoteFile)
 		serverPort = 256 * a + b;
 	}
 
-	sprintf_s(msg, "STOR %s\r\n", remoteFile);
+	
+	if (!remoteFile.IsEmpty())
+		sprintf_s(msg, "STOR %s\r\n", remoteFile.GetString());
+	else
+		sprintf_s(msg, "STOR %s\r\n", get_fileName_with_Ext(localFile).GetString());
+	
 	msgSz = strlen(msg);
 	if (controlSock.Send(&msg, msgSz) <= 0)
 	{
@@ -769,7 +809,7 @@ BOOL FTPConnection::GetFile(const CString& remote_file_name, const CString& loca
 	// tạo file rỗng tại client
 	if (!local_file.Open(local_file_name, CFile::modeCreate | CFile::modeWrite | CFile::typeBinary))
 	{
-		sprintf_s(msg, "Cannot create local file: %s\n", local_file_name);
+		sprintf_s(msg, "Cannot create local file: %s\n", local_file_name.GetString());
 		outputControlMsg.push(msg);
 		return FALSE;
 	}
@@ -829,7 +869,7 @@ BOOL FTPConnection::GetFile(const CString& remote_file_name, const CString& loca
 BOOL FTPConnection::GetMultipleFiles(const vector<CString>& remote_file_names)
 {
 	char msg[MAX_MSG_BUF + 1]{ 0 };
-	int msgSz;
+	
 	CFile local_file;
 
 	for (const auto& elm : remote_file_names)
@@ -957,7 +997,7 @@ BOOL FTPConnection::DeleteRemoteFile(const CString& remote_file_name)
 BOOL FTPConnection::DeleteRemoteMultipleFiles(const vector<CString>& remote_file_names)
 {
 	char msg[MAX_MSG_BUF + 1]{ 0 };
-	int msgSz;
+	
 	CFile local_file;
 
 	for (const auto& elm : remote_file_names)
@@ -1054,63 +1094,29 @@ BOOL FTPConnection::PrintRemoteWorkingDir()
 
 BOOL FTPConnection::PutMultipleFiles(const vector<CString>& localFile)
 {
-	// Thiết lập chế độ truyền
-	//SetMode(currentMode);
-
-	// Tham số có 2 dạng:
-	// *.ext
-	// file1.ext1 file2.ext2 ...
-
-	//Duyệt tìm trong thư mục hiện hành tên các file ấy
-	//nếu tồn tại -> upload lên server
-	//không tồn tại thì bỏ qua, duyệt tên tiếp theo
+	// Tham số tổng quát
+	// *.ext	/path/*.ext		/path/file_name.ext		file_name.ext
 	BOOL bRet = TRUE;
-
-	WIN32_FIND_DATA fdFile;
-	HANDLE hFind = nullptr;
+	
 	char sPath[256];
 	
 	for (auto it : localFile)
 	{
-		// Xóa các dấu * có trong chuỗi
 
-		// *.ext  -> .ext
-		// name.* -> name.
-		// *.*    -> .
+		sprintf_s(sPath, "%s%s", get_path(it).GetString(), get_file_name(it).GetString());
+		
+		WIN32_FIND_DATA fdFile;
+		HANDLE hFind = nullptr;
 
-		CString fileName = it;
-		int pos;
-		while ((pos = fileName.Find('*')) != -1)
+		//Tìm thấy tên file thỏa trong thư mục
+		if ((hFind = FindFirstFile(sPath, &fdFile)) != INVALID_HANDLE_VALUE)
 		{
-			fileName.Delete(pos);
+			do
+			{
+				bRet = PutFile(get_path(it) + fdFile.cFileName, "");
+			} while (FindNextFile(hFind, &fdFile));
+			FindClose(hFind);
 		}
-
-		sprintf_s(sPath, "%s\\*.*", currentDir);
-		hFind = FindFirstFile(sPath, &fdFile);
-
-		do
-		{
-			if (!strcmp(fdFile.cFileName, "."))						//Tìm được file ẩn
-				continue;
-
-			if (!strcmp(fdFile.cFileName, ".."))					//Tìm được thư mục ẩn
-				continue;
-
-			if (fdFile.dwFileAttributes &FILE_ATTRIBUTE_DIRECTORY)	//Tìm được tên thư mục
-				continue;
-
-			// Tìm được 1 tập tin
-
-			// Tìm sự xuất hiện của chuỗi fileName
-			// trong các file ở currentDir
-			if (strstr(fdFile.cFileName, fileName) == nullptr)
-				continue;
-				
-			if (!PutFile(fdFile.cFileName, fdFile.cFileName))
-				bRet = FALSE;
-
-		} while (FindNextFile(hFind, &fdFile));
-		FindClose(hFind);
 	}
 	
 	return bRet;
