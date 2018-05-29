@@ -47,20 +47,10 @@ BOOL FTPConnection::InitDataSock()
 	}
 
 	// gửi lệnh PASV/PORT
-	if (controlSock.Send(msg, strlen(msg), 0) == SOCKET_ERROR)
-	{
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(msg);
-		return false;
-	}
+	controlSock.Send(msg, strlen(msg), 0);
 
 	// nhận phản hồi từ server
-	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF)) == SOCKET_ERROR)
-	{
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(msg);
-		return false;
-	}
+	msgSz = controlSock.Receive(msg, MAX_MSG_BUF);
 
 	msg[msgSz] = '\0';
 	outputControlMsg.push(msg);
@@ -162,10 +152,7 @@ BOOL FTPConnection::OpenConnection(const char * IPAddr)
 	char msg[MAX_MSG_BUF];
 	int msgSz;
 
-	if (!controlSock.Create()) {
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(CString(msg));
-	}
+	controlSock.Create();
 
 	auto isValidIPAddr = [](const char *IPAddr) -> bool
 	{
@@ -180,23 +167,15 @@ BOOL FTPConnection::OpenConnection(const char * IPAddr)
 		return FALSE;
 	}
 
-	if (!controlSock.Connect(IPAddr, 21)) {
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(CString(msg));
-		return FALSE;
-	}
+	controlSock.Connect(IPAddr, 21);
 
 	sprintf_s(msg, "Connected to %s.\n", IPAddr);
 	outputControlMsg.push(CString(msg));
 
 	UINT clientControlPort;
 	controlSock.GetSockName(clientIPAddr, clientControlPort);
-
-	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF)) <= 0) {
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(CString(msg));
-		return FALSE;
-	}
+	
+	msgSz = controlSock.Receive(msg, MAX_MSG_BUF);
 	msg[msgSz] = '\0';
 	outputControlMsg.push(CString(msg));
 
@@ -227,17 +206,9 @@ BOOL FTPConnection::LogIn(const char * userName, const char * userPass)
 	sprintf_s(msg, "USER %s\r\n", userName);
 	msgSz = strlen(msg);
 	msg[msgSz] = '\0';
-	if (controlSock.Send(&msg, msgSz) <= 0) {
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(CString(msg));
-		return FALSE;
-	}
+	controlSock.Send(&msg, msgSz);
 
-	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF)) <= 0) {
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(CString(msg));
-		return FALSE;
-	}
+	msgSz = controlSock.Receive(msg, MAX_MSG_BUF);
 	msg[msgSz] = '\0';						//Thêm kí tự NULL vào cuối thông điệp nhận được
 	outputControlMsg.push(CString(msg));
 
@@ -247,17 +218,9 @@ BOOL FTPConnection::LogIn(const char * userName, const char * userPass)
 	sprintf_s(msg, "PASS %s\r\n", userPass);
 	msgSz = strlen(msg);
 	msg[msgSz] = '\0';
-	if (controlSock.Send(&msg, msgSz) <= 0) {
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(CString(msg));
-		return FALSE;
-	}
+	controlSock.Send(&msg, msgSz);
 
-	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF)) <= 0) {
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(CString(msg));
-		return FALSE;
-	}
+	msgSz = controlSock.Receive(msg, MAX_MSG_BUF);
 	msg[msgSz] = '\0';							//Thêm kí tự NULL vào cuối thông điệp nhận được
 	outputControlMsg.push(CString(msg));
 
@@ -279,19 +242,9 @@ BOOL FTPConnection::Close()
 
 	sprintf_s(msg, "QUIT\r\n");
 	msgSz = strlen(msg);
-
-	if (controlSock.Send(&msg, msgSz) <= 0) {
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(CString(msg));
-		return FALSE;
-	}
-
-	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF)) <= 0) {
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(CString(msg));
-		return FALSE;
-	}
-
+	controlSock.Send(&msg, msgSz);
+	
+	msgSz = controlSock.Receive(msg, MAX_MSG_BUF);
 	msg[msgSz] = '\0';							//Thêm kí tự NULL vào cuối thông điệp nhận được
 	outputControlMsg.push(CString(msg));
 
@@ -328,23 +281,10 @@ BOOL FTPConnection::ListAllFile(const CString& remote_dir, const CString& local_
 		return false;
 
 	// Gửi lệnh NLST cho server
-	if (controlSock.Send(msg, strlen(msg), 0) == SOCKET_ERROR)
-	{
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(msg);
-		close_data_sock();
-		return FALSE;
-	}
-
+	controlSock.Send(msg, strlen(msg), 0);
+	
 	// nhận phản hồi từ server
-	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF, 0)) == SOCKET_ERROR)
-	{
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(msg);
-		close_data_sock();
-		return FALSE;
-	}
-
+	msgSz = controlSock.Receive(msg, MAX_MSG_BUF, 0);
 	msg[msgSz] = '\0';
 	outputControlMsg.push(msg);
 	// kiểm tra code phản hồi, "150 Opening ASCII mode data connection for NLIST ..."
@@ -365,21 +305,8 @@ BOOL FTPConnection::ListAllFile(const CString& remote_dir, const CString& local_
 	}
 	else
 	{
-		if (!dataSock.Listen(1))
-		{
-			sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-			outputControlMsg.push(msg);
-			dataSock.Close();
-			return FALSE;
-		}
-
-		if (!dataSock.Accept(dataTrans))
-		{
-			sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-			outputControlMsg.push(msg);
-			dataSock.Close();
-			return FALSE;
-		}
+		dataSock.Listen(1);
+		dataSock.Accept(dataTrans);	
 	}
 
 	// bắt đầu nhận phản hồi từ data port (thông tin danh sách file)
@@ -390,14 +317,7 @@ BOOL FTPConnection::ListAllFile(const CString& remote_dir, const CString& local_
 	}
 
 	// nhận phản hồi từ server
-	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF, 0)) == SOCKET_ERROR)
-	{
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(msg);
-		close_data_sock();
-		return FALSE;
-	}
-
+	msgSz = controlSock.Receive(msg, MAX_MSG_BUF, 0);
 	msg[msgSz] = '\0';
 	outputControlMsg.push(msg);
 
@@ -433,48 +353,19 @@ BOOL FTPConnection::ListAllDirectory(const char * remote_dir, const char * local
 
 	sprintf_s(msg, "LIST %s\r\n", remote_dir);
 	msgSz = strlen(msg);
-	if (controlSock.Send(&msg, msgSz) <= 0)
-	{
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(CString(msg));
-		return FALSE;
-	}
-
+	controlSock.Send(&msg, msgSz);
+	
 	if (!isPassive)
 	{
-		if (!dataSock.Listen())
-		{
-			sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-			outputControlMsg.push(CString(msg));
-			return FALSE;
-		}
-		else
-		{
-			if (!dataSock.Accept(dataTrans))
-			{
-				sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-				outputControlMsg.push(CString(msg));
-				return FALSE;
-			}
-		}
+		dataSock.Listen();
+		dataSock.Accept(dataTrans);
 	}
 	else
 	{
-		if (!dataTrans.Connect(serverIP.GetString(), serverPort))
-		{
-			sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-			outputControlMsg.push(CString(msg));
-			return false;
-		}
+		dataTrans.Connect(serverIP.GetString(), serverPort);
 	}
 
-
-	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF)) <= 0) {
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(CString(msg));
-		return false;
-	}
-
+	msgSz = controlSock.Receive(msg, MAX_MSG_BUF);
 	msg[msgSz] = '\0';
 	outputControlMsg.push(msg);
 
@@ -504,11 +395,7 @@ BOOL FTPConnection::ListAllDirectory(const char * remote_dir, const char * local
 
 	if (!isReceivedEnough)
 	{
-		if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF)) <= 0) {
-			sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-			outputControlMsg.push(CString(msg));
-			return false;
-		}
+		msgSz = controlSock.Receive(msg, MAX_MSG_BUF);
 		msg[msgSz] = '\0';
 		outputControlMsg.push(msg);
 	}
@@ -551,19 +438,9 @@ BOOL FTPConnection::CreateDir(const char * directory)
 
 	sprintf_s(msg, "MKD %s\r\n", directory);
 	msgSz = strlen(msg);
+	controlSock.Send(&msg, msgSz);
 
-	if (controlSock.Send(&msg, msgSz) <= 0) {
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(CString(msg));
-		return FALSE;
-	}
-
-	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF)) <= 0) {
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(CString(msg));
-		return FALSE;
-	}
-
+	msgSz = controlSock.Receive(msg, MAX_MSG_BUF);
 	msg[msgSz] = '\0';							//Thêm kí tự NULL vào cuối thông điệp nhận được
 	outputControlMsg.push(CString(msg));
 
@@ -607,42 +484,15 @@ BOOL FTPConnection::PutFile(const CString& localFile, const CString& remoteFile)
 		sprintf_s(msg, "STOR %s\r\n", get_fileName_with_Ext(localFile).GetString());
 
 	msgSz = strlen(msg);
-	if (controlSock.Send(&msg, msgSz) <= 0)
-	{
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(CString(msg));
-		file.close();
-		return FALSE;
-	}
-
+	controlSock.Send(&msg, msgSz);
+	
 	if (!isPassive)
 	{
-		if (!dataSock.Listen())
-		{
-			sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-			outputControlMsg.push(CString(msg));
-			file.close();
-			return FALSE;
-		}
-		else
-		{
-			if (!dataSock.Accept(dataTrans))
-			{
-				sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-				outputControlMsg.push(CString(msg));
-				file.close();
-				return FALSE;
-			}
-		}
+		dataSock.Listen();
+		dataSock.Accept(dataTrans);
 	}
 
-
-	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF)) <= 0) {
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(CString(msg));
-		return false;
-	}
-
+	msgSz = controlSock.Receive(msg, MAX_MSG_BUF);
 	msg[msgSz] = '\0';
 	outputControlMsg.push(msg);
 
@@ -652,13 +502,7 @@ BOOL FTPConnection::PutFile(const CString& localFile, const CString& remoteFile)
 
 	if (isPassive)
 	{
-		if (!dataTrans.Connect(serverIP.GetString(), serverPort))
-		{
-			sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-			outputControlMsg.push(CString(msg));
-			file.close();
-			return false;
-		}
+		dataTrans.Connect(serverIP.GetString(), serverPort);
 	}
 
 	int relyCode = getRelyCode(msg);
@@ -698,12 +542,7 @@ BOOL FTPConnection::PutFile(const CString& localFile, const CString& remoteFile)
 
 	if (!isReceivedEnough)
 	{
-		if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF)) <= 0) {
-			sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-			outputControlMsg.push(CString(msg));
-			file.close();
-			return false;
-		}
+		msgSz = controlSock.Receive(msg, MAX_MSG_BUF);
 		msg[msgSz] = '\0';
 		outputControlMsg.push(msg);
 	}
@@ -747,21 +586,10 @@ BOOL FTPConnection::GetFile(const CString& remote_file_name, const CString& loca
 
 	// Gửi lệnh lấy 1 file (RETR remote-file)
 	sprintf_s(msg, "RETR %s\r\n", remote_file_name.GetString());
-	if (controlSock.Send(msg, strlen(msg), 0) <= 0)
-	{
-		outputControlMsg.push(msg);
-		close_data_sock();
-		return FALSE;
-	}
-
+	controlSock.Send(msg, strlen(msg), 0);
+	
 	// nhận phản hồi từ control port
-	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF, 0)) == SOCKET_ERROR)
-	{
-		outputControlMsg.push(msg);
-		close_data_sock();
-		return FALSE;
-	}
-
+	msgSz = controlSock.Receive(msg, MAX_MSG_BUF, 0);
 	msg[msgSz] = '\0';
 	outputControlMsg.push(msg);
 
@@ -790,14 +618,7 @@ BOOL FTPConnection::GetFile(const CString& remote_file_name, const CString& loca
 	}
 	else
 	{
-		if (!dataSock.Listen(1))
-		{
-			sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-			outputControlMsg.push(msg);
-			dataSock.Close();
-			return FALSE;
-		}
-
+		dataSock.Listen(1);
 		dataSock.Accept(dataTrans);
 	}
 
@@ -808,14 +629,7 @@ BOOL FTPConnection::GetFile(const CString& remote_file_name, const CString& loca
 	}
 
 	// nhận phản hồi từ server
-	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF, 0)) == SOCKET_ERROR)
-	{
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(msg);
-		close_data_sock();
-		return FALSE;
-	}
-
+	msgSz = controlSock.Receive(msg, MAX_MSG_BUF, 0);
 	msg[msgSz] = '\0';
 	outputControlMsg.push(msg);
 
@@ -887,20 +701,9 @@ BOOL FTPConnection::SetMode(FTPConnection::Mode mode)
 	int msgSz;
 
 	sprintf_s(msg, "TYPE %c\r\n", mode == ASCII ? 'A' : 'I');
-	if (controlSock.Send(msg, strlen(msg), 0) == SOCKET_ERROR)
-	{
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(msg);
-		return FALSE;
-	}
-
-	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF, 0)) == SOCKET_ERROR)
-	{
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(msg);
-		return FALSE;
-	}
-
+	controlSock.Send(msg, strlen(msg), 0);
+	
+	msgSz = controlSock.Receive(msg, MAX_MSG_BUF, 0);
 	msg[msgSz] = '\0';
 	outputControlMsg.push(msg);
 
@@ -917,21 +720,9 @@ BOOL FTPConnection::ChangeRemoteWorkingDir(const CString& dir)
 	int msgSz;
 
 	sprintf_s(msg, "CWD %s\r\n", dir.GetString());
-
-	if (controlSock.Send(msg, strlen(msg), 0) == SOCKET_ERROR)
-	{
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(msg);
-		return FALSE;
-	}
-
-	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF, 0)) == SOCKET_ERROR)
-	{
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(msg);
-		return FALSE;
-	}
-
+	controlSock.Send(msg, strlen(msg), 0);
+	
+	msgSz = controlSock.Receive(msg, MAX_MSG_BUF, 0);
 	msg[msgSz] = '\0';
 	outputControlMsg.push(msg);
 
@@ -947,21 +738,9 @@ BOOL FTPConnection::DeleteRemoteFile(const CString& remote_file_name)
 	int msgSz;
 
 	sprintf_s(msg, "DELE %s\r\n", remote_file_name.GetString());
-
-	if (controlSock.Send(msg, strlen(msg), 0) == SOCKET_ERROR)
-	{
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(msg);
-		return FALSE;
-	}
-
-	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF, 0)) == SOCKET_ERROR)
-	{
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(msg);
-		return FALSE;
-	}
-
+	controlSock.Send(msg, strlen(msg), 0);
+	
+	msgSz = controlSock.Receive(msg, MAX_MSG_BUF, 0);
 	msg[msgSz] = '\0';
 	outputControlMsg.push(msg);
 
@@ -1024,21 +803,9 @@ BOOL FTPConnection::RemoveRemoteDir(const CString& remote_dir)
 	int msgSz;
 
 	sprintf_s(msg, "RMD %s\r\n", remote_dir.GetString());
+	controlSock.Send(msg, strlen(msg), 0);
 
-	if (controlSock.Send(msg, strlen(msg), 0) == SOCKET_ERROR)
-	{
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(msg);
-		return FALSE;
-	}
-
-	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF, 0)) == SOCKET_ERROR)
-	{
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(msg);
-		return FALSE;
-	}
-
+	msgSz = controlSock.Receive(msg, MAX_MSG_BUF, 0);
 	msg[msgSz] = '\0';
 	outputControlMsg.push(msg);
 
@@ -1059,21 +826,9 @@ BOOL FTPConnection::PrintRemoteWorkingDir()
 	int msgSz;
 
 	strcpy_s(msg, "PWD\r\n");
+	controlSock.Send(msg, strlen(msg), 0);
 
-	if (controlSock.Send(msg, strlen(msg), 0) == SOCKET_ERROR)
-	{
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(msg);
-		return FALSE;
-	}
-
-	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF, 0)) == SOCKET_ERROR)
-	{
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(msg);
-		return FALSE;
-	}
-
+	msgSz = controlSock.Receive(msg, MAX_MSG_BUF, 0);
 	msg[msgSz] = '\0';
 	outputControlMsg.push(msg);
 
