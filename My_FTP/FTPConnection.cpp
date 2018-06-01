@@ -1,6 +1,8 @@
 ﻿#include "stdafx.h"
 #include "FTPConnection.h"
 
+unique_lock<mutex> l(theLock, defer_lock);
+
 int getRelyCode(const char *relyMsg)
 {
 	int RelyCode;
@@ -22,18 +24,22 @@ void splitLineToVector(const char *src, vector<CString> &des)
 	}
 }
 
-void splitLineToQueue(queue<CString> &des, CString src)
+int splitLineToQueue(queue<CString>& des, CString src)
 {
 	static CString buff;
 	buff += src;
 	int length = buff.Find("\r\n");
-
+	int nMsg = 0;
+	
 	while (length != -1)
 	{
 		des.push(buff.Left(length + 2));
 		buff.Delete(0, length + 2);
 		length = buff.Find("\r\n");
+		nMsg++;
 	}
+
+	return nMsg;
 }
 
 BOOL FTPConnection::InitDataSock()
@@ -324,19 +330,39 @@ BOOL FTPConnection::Close()
 */
 BOOL FTPConnection::ListAllFile(const CString& remote_dir, const CString& local_file)
 {
+	//unique_lock<mutex> l(theLock, defer_lock);
+
 	char msg[MAX_MSG_BUF + 1]{ 0 }, data[MAX_TRANSFER + 1]{ 0 };
 	int msgSz, dataSz = 0;
-
+	chrono::duration<double> time_span;
 	sprintf_s(msg, "NLST %s\r\n", remote_dir.GetString());
 
 	// thiết lập kết nối nếu ở chế độ active (mặc định)
 	if (!InitDataSock())
-		return FALSE;
+		return false;
 
 	// Gửi lệnh NLST cho server
 	if (controlSock.Send(msg, strlen(msg), 0) == SOCKET_ERROR)
 	{
 		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
+		outputControlMsg.push(msg);
+		close_data_sock();
+		return FALSE;
+	}
+
+	// nhận phản hồi từ server
+	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF, 0)) == SOCKET_ERROR)
+	{
+		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
+		outputControlMsg.push(msg);
+		close_data_sock();
+		return FALSE;
+	}
+
+	msg[msgSz] = '\0';
+	int relyCode = getRelyCode(msg);
+	if (relyCode != 150 && relyCode != 125)
+	{
 		outputControlMsg.push(msg);
 		close_data_sock();
 		return FALSE;
@@ -369,52 +395,75 @@ BOOL FTPConnection::ListAllFile(const CString& remote_dir, const CString& local_
 		}
 	}
 
-
-	// nhận phản hồi từ server
-	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF, 0)) == SOCKET_ERROR)
+	if (!l.owns_lock())		// trường hợp gọi ListAllFile riêng
 	{
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(msg);
-		close_data_sock();
-		return FALSE;
-	}
+		l.lock();
+		//cv.wait(l, []() {return ready; });
+		//ready = false;
+		// Trường hợp mà nhận đc cả hai thông điệp 150 ... \r\n và 125... \r\n
+		// ->Tách ra rồi đưa vào hàng đợi
+		int nMsg = splitLineToQueue(outputControlMsg, msg);
 
-	msg[msgSz] = '\0';
-	// Trường hợp mà nhận đc cả hai thông điệp 150 ... \r\n và 126... \r\n
-	// ->Tách ra rồi đưa vào hàng đợi
-	splitLineToQueue(outputControlMsg, msg);
-	// kiểm tra code phản hồi, "150 Opening ASCII mode data connection for NLIST ..."
-	if (getRelyCode(msg) != 150)
-	{
-		close_data_sock();
-		return FALSE;
-	}
 
-	// đã nhận được phản hồi đúng từ server
-	int blockSz = 0;
-	chrono::steady_clock::time_point t1 = chrono::steady_clock::now();
+
+		if (nMsg == 2)		// có trên 2 msg => chuyển thành 1 msg
+		{
+			strcpy_s(msg, std::find(begin(msg), end(msg), '\n') + 1);
+			outputControlMsg.pop();
+		}
+
 	
-	// bắt đầu nhận phản hồi từ data port (thông tin danh sách file)
-	while ((blockSz = dataTrans.Receive(data, MAX_TRANSFER, 0)) > 0)
-	{
-		data[blockSz] = '\0';
-		splitLineToVector(data, outputMsg);
-		dataSz += blockSz;
+		//ready = true;
+		//cv.notify_all();
+		// bắt đầu nhận phản hồi từ data port (thông tin danh sách file)
+		int blockSz = 0;
+		chrono::steady_clock::time_point t1 = chrono::steady_clock::now();
+
+		// bắt đầu nhận phản hồi từ data port (thông tin danh sách file)
+		while ((blockSz = dataTrans.Receive(data, MAX_TRANSFER, 0)) > 0)
+		{
+			data[blockSz] = '\0';
+			splitLineToVector(data, outputMsg);
+			dataSz += blockSz;
+		}
+
+		chrono::steady_clock::time_point t2 = chrono::steady_clock::now();
+		time_span = chrono::duration_cast<chrono::duration<double>>(t2 - t1);
+		l.unlock();
 	}
-	
-	chrono::steady_clock::time_point t2 = chrono::steady_clock::now();
-	chrono::duration<double> time_span = chrono::duration_cast<chrono::duration<double>>(t2 - t1);
-	
+	else		// trường hợp ListAllFile được các hàm mget, mdelete gọi
+	{
+		// Trường hợp mà nhận đc cả hai thông điệp 150 ... \r\n và 125... \r\n
+		// ->Tách ra rồi đưa vào hàng đợi
+		int nMsg = splitLineToQueue(outputControlMsg, msg);
+
+		if (nMsg == 2)		// có trên 2 msg => chuyển thành 1 msg
+		{
+			strcpy_s(msg, std::find(begin(msg), end(msg), '\n') + 1);
+			outputControlMsg.pop();
+		}
+
+		while ((dataSz = dataTrans.Receive(data, MAX_TRANSFER, 0)) > 0)
+		{
+			data[dataSz] = '\0';
+			splitLineToVector(data, outputMsg);
+		}
+	}
 	close_data_sock();
-	// Lấy thử thông điệp cuối cùng -> Đã nhận "226 ...\r\n" thì thoát
-	if (getRelyCode(outputControlMsg.back().GetString()) == 226)
-		goto printTransferSpeed;
 
-	// nhận phản hồi từ server
+	if (getRelyCode(msg) == 226)		// đã nhận code 226 trước đó
+	{
+		outputControlMsg.push(msg);
+		goto printTransferSpeed;
+	}
+
+
+	// nếu chưa nhận code 226 => nhận phản hồi từ server
 	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF, 0)) == SOCKET_ERROR)
 	{
 		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
 		outputControlMsg.push(msg);
+		close_data_sock();
 		return FALSE;
 	}
 
@@ -423,19 +472,26 @@ BOOL FTPConnection::ListAllFile(const CString& remote_dir, const CString& local_
 
 	// kiểm tra code của phàn hồi, 
 	if (getRelyCode(msg) != 226)	// "226 Transfer complete ...."
+	{
+		close_data_sock();
 		return FALSE;
-
-	printTransferSpeed:
+	}
+printTransferSpeed:
 	sprintf_s(msg, "My ftp: %d bytes received in %.2f (s) %.2f (KB/s).\r\n", dataSz, time_span.count(), ((float)dataSz / 1024) / time_span.count());
 	outputControlMsg.push(CString(msg));
+
 	return TRUE;
 }
 
 BOOL FTPConnection::ListAllDirectory(const char * remote_dir, const char * local_file)
 {
+	unique_lock<mutex> l(theLock, defer_lock);
 	char msg[MAX_MSG_BUF];
 	int msgSz;
-	
+	char data[MAX_TRANSFER] = { 0 };
+	int dataSz = 0, blockSz;
+	chrono::duration<double> time_span;
+
 	if (InitDataSock() == false)
 		return false;
 
@@ -443,10 +499,13 @@ BOOL FTPConnection::ListAllDirectory(const char * remote_dir, const char * local
 	UINT serverPort;
 	if (isPassive)
 	{
-		int A, B, C, D, a, b;
-		sscanf_s(outputControlMsg.front().GetString(), "227 %*s %*s %*s (%d,%d,%d,%d,%d,%d)", &A, &B, &C, &D, &a, &b);
-		serverIP.Format("%d.%d.%d.%d", A, B, C, D);
-		serverPort = 256 * a + b;
+		//int A, B, C, D, a, b;
+		//sscanf_s(outputControlMsg.front().GetString(), "227 %*s %*s %*s (%d,%d,%d,%d,%d,%d)", &A, &B, &C, &D, &a, &b);
+		//serverIP.Format("%d.%d.%d.%d", A, B, C, D);
+		//serverPort = 256 * a + b;
+
+		UINT dummy;
+		controlSock.GetPeerName(serverIP, dummy);
 	}
 
 	sprintf_s(msg, "LIST %s\r\n", remote_dir);
@@ -478,7 +537,7 @@ BOOL FTPConnection::ListAllDirectory(const char * remote_dir, const char * local
 	}
 	else
 	{
-		if (!dataTrans.Connect(serverIP.GetString(), serverPort))
+		if (!dataTrans.Connect(serverIP.GetString(), server_data_port))
 		{
 			sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
 			outputControlMsg.push(CString(msg));
@@ -496,36 +555,64 @@ BOOL FTPConnection::ListAllDirectory(const char * remote_dir, const char * local
 	msg[msgSz] = '\0';
 	// Trường hợp mà nhận đc cả hai thông điệp 150 ... \r\n và 126... \r\n
 	// ->Tách ra rồi đưa vào hàng đợi
-	splitLineToQueue(outputControlMsg, msg);
+	l.lock();
+	cv.wait(l, []() {return ready; });
+	ready = false;
+
+	int nMsg = splitLineToQueue(outputControlMsg, msg);
+
+	l.unlock();
+	ready = true;
+	cv.notify_one();
 
 	int relyCode = getRelyCode(msg);
 	if (relyCode != 150 && relyCode != 125)
 		return false;
 
-	// Nhận data ở cả active và passive
-	char data[MAX_TRANSFER] = { 0 };
-	int dataSz = 0, blockSz;
-	
-	chrono::steady_clock::time_point t1 = chrono::steady_clock::now();
-	
-	//Gửi lần lượt từng block data lên server
-	while ((blockSz = dataTrans.Receive(data, MAX_TRANSFER - 1)) > 0)
+	if (nMsg == 2)
 	{
-		data[blockSz] = '\0';
-		splitLineToVector(data, outputMsg);
-		dataSz += blockSz;
+		strcpy_s(msg, std::find(begin(msg), end(msg), '\n') + 1);
 	}
-	chrono::steady_clock::time_point t2 = chrono::steady_clock::now();
-	chrono::duration<double> time_span = chrono::duration_cast<chrono::duration<double>>(t2 - t1);
+
+	//Gửi lần lượt từng block data lên server
+	if (!l.owns_lock())
+	{
+		l.lock();
+
+		chrono::steady_clock::time_point t1 = chrono::steady_clock::now();
+
+		//Gửi lần lượt từng block data lên server
+		while ((blockSz = dataTrans.Receive(data, MAX_TRANSFER - 1)) > 0)
+		{
+			data[blockSz] = '\0';
+			splitLineToVector(data, outputMsg);
+			dataSz += blockSz;
+		}
+		chrono::steady_clock::time_point t2 = chrono::steady_clock::now();
+		time_span = chrono::duration_cast<chrono::duration<double>>(t2 - t1);
+
+		l.unlock();
+	}
+	else
+	{
+		//Gửi lần lượt từng block data lên server
+		while ((dataSz = dataTrans.Receive(data, MAX_TRANSFER, 0)) > 0)
+		{
+			data[dataSz] = '\0';
+			splitLineToVector(data, outputMsg);
+		}
+	}
+
 	close_data_sock();
-	
+
 	// Lấy thử thông điệp cuối cùng -> Đã nhận "226 ...\r\n" thì thoát
-	if (getRelyCode(outputControlMsg.back().GetString()) == 226)
+	if (getRelyCode(msg) == 226)
 	{
 		sprintf_s(msg, "My ftp: %d bytes received in %.2f (s) %.2f (KB/s).\r\n", dataSz, time_span.count(), ((float)dataSz / 1024) / time_span.count());
 		outputControlMsg.push(CString(msg));
 		return true;
 	}
+
 	// Nếu vẫn chưa nhận thông điệp "226 ...\r\n"
 	// -> Nhận cho đủ
 	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF)) <= 0) {
@@ -535,7 +622,6 @@ BOOL FTPConnection::ListAllDirectory(const char * remote_dir, const char * local
 	}
 	msg[msgSz] = '\0';
 	outputControlMsg.push(msg);
-	
 	sprintf_s(msg, "My ftp: %d bytes received in %.2f (s) %.2f (KB/s).\r\n", dataSz, time_span.count(), ((float)dataSz / 1024) / time_span.count());
 	outputControlMsg.push(CString(msg));
 	return true;
@@ -616,13 +702,10 @@ BOOL FTPConnection::PutFile(const CString& localFile, const CString& remoteFile)
 		return false;
 
 	CString serverIP;
-	UINT serverPort;
 	if (isPassive)
 	{
-		int A, B, C, D, a, b;
-		sscanf_s(outputControlMsg.front().GetString(), "227 %*s %*s %*s (%d,%d,%d,%d,%d,%d)", &A, &B, &C, &D, &a, &b);
-		serverIP.Format("%d.%d.%d.%d", A, B, C, D);
-		serverPort = 256 * a + b;
+		UINT dummy;
+		controlSock.GetPeerName(serverIP, dummy);
 	}
 
 
@@ -660,13 +743,13 @@ BOOL FTPConnection::PutFile(const CString& localFile, const CString& remoteFile)
 	}
 	else
 	{
-		if (!dataTrans.Connect(serverIP.GetString(), serverPort))
+		if (!dataTrans.Connect(serverIP.GetString(), server_data_port))
 		{
 			sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
 			outputControlMsg.push(CString(msg));
 			file.close();
 			close_data_sock();
-			return FALSE;
+			return false;
 		}
 	}
 
@@ -674,18 +757,31 @@ BOOL FTPConnection::PutFile(const CString& localFile, const CString& remoteFile)
 		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
 		outputControlMsg.push(CString(msg));
 		close_data_sock();
-		return FALSE;
+		return false;
 	}
 
 	msg[msgSz] = '\0';
-	splitLineToQueue(outputControlMsg, msg);
+	l.lock();
+	cv.wait(l, []() {return ready; });
+	ready = false;
+
+	int nMsg = splitLineToQueue(outputControlMsg, msg);
+
+	l.unlock();
+	ready = true;
+	cv.notify_one();
 
 	int relyCode = getRelyCode(msg);
+	if (nMsg == 2)		// có trên 2 msg => chuyển thành 1 msg
+	{
+		strcpy_s(msg, std::find(begin(msg), end(msg), '\n') + 1);
+	}
+
 	if (relyCode != 150 && relyCode != 125)
 	{
 		file.close();
 		close_data_sock();
-		return FALSE;
+		return false;
 	}
 	// Gửi data ở cả active và passive
 	char data[MAX_TRANSFER - 1] = { 0 };
@@ -706,27 +802,29 @@ BOOL FTPConnection::PutFile(const CString& localFile, const CString& remoteFile)
 
 	file.close();
 	close_data_sock();
-	
+
 	// Lấy thử thông điệp cuối cùng -> Đã nhận "226 ...\r\n" thì thoát
-	if (getRelyCode(outputControlMsg.back().GetString()) == 226)
+	if (getRelyCode(msg) == 226)
 	{
 		sprintf_s(msg, "My ftp: %d bytes sent in %.2f (s) %.2f (KB/s).\r\n", dataSz, time_span.count(), ((float)dataSz / 1024) / time_span.count());
 		outputControlMsg.push(CString(msg));
 		return TRUE;
 	}
+	file.close();
+	close_data_sock();
 
 	// Nếu vẫn chưa nhận thông điệp "226 ...\r\n"
 	// -> Nhận cho đủ
 	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF)) <= 0) {
 		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
 		outputControlMsg.push(CString(msg));
-		return FALSE;
+		return false;
 	}
 	msg[msgSz] = '\0';
 	outputControlMsg.push(msg);
 	sprintf_s(msg, "My ftp: %d bytes sent in %.2f (s) %.2f (KB/s).\r\n", dataSz, time_span.count(), ((float)dataSz / 1024) / time_span.count());
 	outputControlMsg.push(CString(msg));
-	return TRUE;
+	return true;
 }
 
 //void FTPConnection::PrintControlMsg()
@@ -772,6 +870,23 @@ BOOL FTPConnection::GetFile(const CString& remote_file_name, const CString& loca
 		return FALSE;
 	}
 
+	// nhận phản hồi từ control port
+	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF, 0)) == SOCKET_ERROR)
+	{
+		outputControlMsg.push(msg);
+		close_data_sock();
+		return FALSE;
+	}
+
+	msg[msgSz] = '\0';
+	int relyCode = getRelyCode(msg);
+	if (relyCode != 150 && relyCode != 125)
+	{
+		close_data_sock();
+		outputControlMsg.push(msg);
+		return false;
+	}
+
 	// thiết lập kết nối cho data socket
 	if (isPassive)
 	{
@@ -793,21 +908,19 @@ BOOL FTPConnection::GetFile(const CString& remote_file_name, const CString& loca
 		dataSock.Accept(dataTrans);
 	}
 
-	// nhận phản hồi từ control port
-	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF)) <= 0) {
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(CString(msg));
-		close_data_sock();
-		return FALSE;
-	}
+	// Trường hợp mà nhận đc cả hai thông điệp 150 ... \r\n và 226... \r\n
+	// ->Tách ra rồi đưa vào hàng đợi
+	l.lock();
+	cv.wait(l, []() {return ready; });
+	ready = false;
+	int nMsg = splitLineToQueue(outputControlMsg, msg);
+	l.unlock();
+	ready = true;
+	cv.notify_one();
 
-	msg[msgSz] = '\0';
-	splitLineToQueue(outputControlMsg, msg);
-
-	if (getRelyCode(msg) != 150)		//"150 Opening BINARY mode data connection for ...."
+	if (nMsg == 2)		// có trên 2 msg => chuyển thành 1 msg
 	{
-		close_data_sock();
-		return FALSE;
+		strcpy_s(msg, std::find(begin(msg), end(msg), '\n') + 1);
 	}
 
 	// đã nhận được phản hồi đúng từ server
@@ -819,6 +932,7 @@ BOOL FTPConnection::GetFile(const CString& remote_file_name, const CString& loca
 		return FALSE;
 	}
 
+	// bắt đầu nhận phản hồi từ data port (dữ liệu của file)
 	chrono::steady_clock::time_point t1 = chrono::steady_clock::now();
 	int blockSz;
 	// bắt đầu nhận phản hồi từ data port (dữ liệu của file)
@@ -834,26 +948,29 @@ BOOL FTPConnection::GetFile(const CString& remote_file_name, const CString& loca
 	local_file.Close();
 	close_data_sock();
 
-	// Lấy thử thông điệp cuối cùng -> Đã nhận "226 ...\r\n" thì thoát
-	if (getRelyCode(outputControlMsg.back().GetString()) == 226)
+	if (getRelyCode(msg) == 226)		// đã nhận code 226 trước đó
 		goto printTransferSpeed;
 
-	// Nếu vẫn chưa nhận thông điệp "226 ...\r\n"
-	// -> Nhận cho đủ
-	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF)) <= 0) {
+	// nhận phản hồi từ server
+	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF, 0)) == SOCKET_ERROR)
+	{
 		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
-		outputControlMsg.push(CString(msg));
+		outputControlMsg.push(msg);
 		return FALSE;
 	}
+
 	msg[msgSz] = '\0';
 	outputControlMsg.push(msg);
-
-	if (getRelyCode(outputControlMsg.back().GetString()) != 226)
+	// kiểm tra code của phản hồi, 
+	if (getRelyCode(msg) != 226)	// "226 Transfer complete ...."
+	{
 		return FALSE;
+	}
 
-	printTransferSpeed:
-	sprintf_s(msg, "My ftp: %d bytes received in %.2f (s) %.2f (KB/s).\r\n", dataSz, time_span.count(), ((float)dataSz / 1024) / time_span.count()); 
+printTransferSpeed:
+	sprintf_s(msg, "My ftp: %d bytes received in %.2f (s) %.2f (KB/s).\r\n", dataSz, time_span.count(), ((float)dataSz / 1024) / time_span.count());
 	outputControlMsg.push(CString(msg));
+
 	return TRUE;
 }
 
@@ -863,6 +980,9 @@ BOOL FTPConnection::GetMultipleFiles(const vector<CString>& remote_file_names)
 	vector<CString> file_names;
 	char dir[256], buf[256];
 
+	l.lock();
+	cv.wait(l, []() {return ready; });
+	ready = false;
 	// lần lượt tìm các file trong danh sách, nếu có 1 file nào đó không tồn tại => return
 	for (const auto& elm : remote_file_names)
 	{
@@ -872,6 +992,10 @@ BOOL FTPConnection::GetMultipleFiles(const vector<CString>& remote_file_names)
 				outputControlMsg.pop();
 			sprintf_s(buf, "Cannot find \"%s\".\n", elm);
 			outputControlMsg.push(buf);
+
+			l.unlock();
+			ready = true;
+			cv.notify_one();
 
 			return FALSE;
 		}
@@ -892,6 +1016,10 @@ BOOL FTPConnection::GetMultipleFiles(const vector<CString>& remote_file_names)
 	// clear outputControlMsg
 	decltype(outputControlMsg) dummy;
 	swap(outputControlMsg, dummy);
+
+	l.unlock();
+	ready = true;
+	cv.notify_one();
 
 	// set chế độ truyền
 	SetMode(currentMode);
@@ -994,6 +1122,7 @@ BOOL FTPConnection::DeleteRemoteFile(const CString& remote_file_name)
 		return FALSE;
 
 	return TRUE;
+
 }
 
 BOOL FTPConnection::DeleteRemoteMultipleFiles(const vector<CString>& remote_file_names)
@@ -1001,6 +1130,9 @@ BOOL FTPConnection::DeleteRemoteMultipleFiles(const vector<CString>& remote_file
 	vector<CString> remote_file_paths;
 	char dir[256], buf[256];
 
+	l.lock();
+	cv.wait(l, []() {return ready; });
+	ready = false;
 	// lần lượt tìm các file trong danh sách, nếu có 1 file nào đó không tồn tại => return
 	for (const auto& elm : remote_file_names)
 	{
@@ -1011,6 +1143,9 @@ BOOL FTPConnection::DeleteRemoteMultipleFiles(const vector<CString>& remote_file
 			sprintf_s(buf, "Cannot find \"%s\".\n", elm);
 			outputControlMsg.push(buf);
 
+			l.unlock();
+			ready = true;
+			cv.notify_one();
 			return FALSE;
 		}
 		else
@@ -1029,6 +1164,9 @@ BOOL FTPConnection::DeleteRemoteMultipleFiles(const vector<CString>& remote_file
 	// clear outputControlMsg
 	decltype(outputControlMsg) dummy;
 	swap(outputControlMsg, dummy);
+	l.unlock();
+	ready = true;
+	cv.notify_one();
 
 	// set chế độ truyền
 	SetMode(currentMode);
@@ -1129,6 +1267,7 @@ BOOL FTPConnection::PutMultipleFiles(const vector<CString>& localFile)
 		{
 			sprintf_s(msg, "%s : File not found\r\n", it.GetString());
 			outputControlMsg.push(CString(msg));
+
 			bRet = FALSE;
 			continue;
 		}
@@ -1146,7 +1285,7 @@ BOOL FTPConnection::PutMultipleFiles(const vector<CString>& localFile)
 
 void FTPConnection::Help()
 {
-
+	lock_guard<mutex> lock(theLock);
 	outputMsg = 
 	{ "?", "open", "user", "ls", "dir", "quit", 
 		"get", "mget", "put", "lcd", "delete", 

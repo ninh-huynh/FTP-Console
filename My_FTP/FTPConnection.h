@@ -7,12 +7,17 @@
 #include <fstream>
 #include <vector>
 #include <map>
+#include <mutex>
 #include <chrono>
 
 #define MAX_MSG_BUF 255			//1461
 #define MAX_TRANSFER 4096
 
 using namespace std;
+
+extern mutex theLock;
+extern bool ready;
+extern condition_variable cv;
 
 class FTPConnection
 {
