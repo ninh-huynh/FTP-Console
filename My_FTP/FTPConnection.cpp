@@ -325,13 +325,13 @@ BOOL FTPConnection::Close()
 BOOL FTPConnection::ListAllFile(const CString& remote_dir, const CString& local_file)
 {
 	char msg[MAX_MSG_BUF + 1]{ 0 }, data[MAX_TRANSFER + 1]{ 0 };
-	int msgSz, dataSz;
+	int msgSz, dataSz = 0;
 
 	sprintf_s(msg, "NLST %s\r\n", remote_dir.GetString());
 
 	// thiết lập kết nối nếu ở chế độ active (mặc định)
 	if (!InitDataSock())
-		return false;
+		return FALSE;
 
 	// Gửi lệnh NLST cho server
 	if (controlSock.Send(msg, strlen(msg), 0) == SOCKET_ERROR)
@@ -391,19 +391,24 @@ BOOL FTPConnection::ListAllFile(const CString& remote_dir, const CString& local_
 	}
 
 	// đã nhận được phản hồi đúng từ server
-
-
+	int blockSz = 0;
+	chrono::steady_clock::time_point t1 = chrono::steady_clock::now();
+	
 	// bắt đầu nhận phản hồi từ data port (thông tin danh sách file)
-	while ((dataSz = dataTrans.Receive(data, MAX_TRANSFER, 0)) > 0)
+	while ((blockSz = dataTrans.Receive(data, MAX_TRANSFER, 0)) > 0)
 	{
-		data[dataSz] = '\0';
+		data[blockSz] = '\0';
 		splitLineToVector(data, outputMsg);
+		dataSz += blockSz;
 	}
-
+	
+	chrono::steady_clock::time_point t2 = chrono::steady_clock::now();
+	chrono::duration<double> time_span = chrono::duration_cast<chrono::duration<double>>(t2 - t1);
+	
 	close_data_sock();
 	// Lấy thử thông điệp cuối cùng -> Đã nhận "226 ...\r\n" thì thoát
 	if (getRelyCode(outputControlMsg.back().GetString()) == 226)
-		return TRUE;
+		goto printTransferSpeed;
 
 	// nhận phản hồi từ server
 	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF, 0)) == SOCKET_ERROR)
@@ -420,6 +425,9 @@ BOOL FTPConnection::ListAllFile(const CString& remote_dir, const CString& local_
 	if (getRelyCode(msg) != 226)	// "226 Transfer complete ...."
 		return FALSE;
 
+	printTransferSpeed:
+	sprintf_s(msg, "My ftp: %d bytes received in %.2f (s) %.2f (KB/s).\r\n", dataSz, time_span.count(), ((float)dataSz / 1024) / time_span.count());
+	outputControlMsg.push(CString(msg));
 	return TRUE;
 }
 
@@ -427,7 +435,7 @@ BOOL FTPConnection::ListAllDirectory(const char * remote_dir, const char * local
 {
 	char msg[MAX_MSG_BUF];
 	int msgSz;
-
+	
 	if (InitDataSock() == false)
 		return false;
 
@@ -496,20 +504,28 @@ BOOL FTPConnection::ListAllDirectory(const char * remote_dir, const char * local
 
 	// Nhận data ở cả active và passive
 	char data[MAX_TRANSFER] = { 0 };
-	int dataSz;
-
+	int dataSz = 0, blockSz;
+	
+	chrono::steady_clock::time_point t1 = chrono::steady_clock::now();
+	
 	//Gửi lần lượt từng block data lên server
-	while ((dataSz = dataTrans.Receive(data, MAX_TRANSFER - 1)) > 0)
+	while ((blockSz = dataTrans.Receive(data, MAX_TRANSFER - 1)) > 0)
 	{
-		data[dataSz] = '\0';
+		data[blockSz] = '\0';
 		splitLineToVector(data, outputMsg);
+		dataSz += blockSz;
 	}
+	chrono::steady_clock::time_point t2 = chrono::steady_clock::now();
+	chrono::duration<double> time_span = chrono::duration_cast<chrono::duration<double>>(t2 - t1);
 	close_data_sock();
-
+	
 	// Lấy thử thông điệp cuối cùng -> Đã nhận "226 ...\r\n" thì thoát
 	if (getRelyCode(outputControlMsg.back().GetString()) == 226)
+	{
+		sprintf_s(msg, "My ftp: %d bytes received in %.2f (s) %.2f (KB/s).\r\n", dataSz, time_span.count(), ((float)dataSz / 1024) / time_span.count());
+		outputControlMsg.push(CString(msg));
 		return true;
-
+	}
 	// Nếu vẫn chưa nhận thông điệp "226 ...\r\n"
 	// -> Nhận cho đủ
 	if ((msgSz = controlSock.Receive(msg, MAX_MSG_BUF)) <= 0) {
@@ -519,6 +535,9 @@ BOOL FTPConnection::ListAllDirectory(const char * remote_dir, const char * local
 	}
 	msg[msgSz] = '\0';
 	outputControlMsg.push(msg);
+	
+	sprintf_s(msg, "My ftp: %d bytes received in %.2f (s) %.2f (KB/s).\r\n", dataSz, time_span.count(), ((float)dataSz / 1024) / time_span.count());
+	outputControlMsg.push(CString(msg));
 	return true;
 }
 
@@ -670,19 +689,31 @@ BOOL FTPConnection::PutFile(const CString& localFile, const CString& remoteFile)
 	}
 	// Gửi data ở cả active và passive
 	char data[MAX_TRANSFER - 1] = { 0 };
-	int dataSz;
+	int blockSz, dataSz = 0;
+
+	chrono::steady_clock::time_point t1 = chrono::steady_clock::now();
+
 	while (!file.eof())
 	{
 		file.read(data, MAX_TRANSFER - 1);
-		dataSz = file.gcount();
-		dataTrans.Send(&data, dataSz);
+		blockSz = file.gcount();
+		dataTrans.Send(&data, blockSz);
+		dataSz += blockSz;
 	}
+
+	chrono::steady_clock::time_point t2 = chrono::steady_clock::now();
+	chrono::duration<double> time_span = chrono::duration_cast<chrono::duration<double>>(t2 - t1);
+
 	file.close();
 	close_data_sock();
 	
 	// Lấy thử thông điệp cuối cùng -> Đã nhận "226 ...\r\n" thì thoát
 	if (getRelyCode(outputControlMsg.back().GetString()) == 226)
+	{
+		sprintf_s(msg, "My ftp: %d bytes sent in %.2f (s) %.2f (KB/s).\r\n", dataSz, time_span.count(), ((float)dataSz / 1024) / time_span.count());
+		outputControlMsg.push(CString(msg));
 		return TRUE;
+	}
 
 	// Nếu vẫn chưa nhận thông điệp "226 ...\r\n"
 	// -> Nhận cho đủ
@@ -693,6 +724,8 @@ BOOL FTPConnection::PutFile(const CString& localFile, const CString& remoteFile)
 	}
 	msg[msgSz] = '\0';
 	outputControlMsg.push(msg);
+	sprintf_s(msg, "My ftp: %d bytes sent in %.2f (s) %.2f (KB/s).\r\n", dataSz, time_span.count(), ((float)dataSz / 1024) / time_span.count());
+	outputControlMsg.push(CString(msg));
 	return TRUE;
 }
 
@@ -724,7 +757,7 @@ BOOL FTPConnection::GetFile(const CString& remote_file_name, const CString& loca
 {
 	CFile local_file;
 	char msg[MAX_MSG_BUF + 1]{ 0 }, data[MAX_TRANSFER]{ 0 };
-	int msgSz, dataSz;
+	int msgSz, dataSz = 0;
 
 	// khởi tạo kết nối data
 	if (!InitDataSock())
@@ -786,19 +819,24 @@ BOOL FTPConnection::GetFile(const CString& remote_file_name, const CString& loca
 		return FALSE;
 	}
 
-
-
+	chrono::steady_clock::time_point t1 = chrono::steady_clock::now();
+	int blockSz;
 	// bắt đầu nhận phản hồi từ data port (dữ liệu của file)
-	while ((dataSz = dataTrans.Receive(data, MAX_TRANSFER, 0)) > 0)
+	while ((blockSz = dataTrans.Receive(data, MAX_TRANSFER, 0)) > 0)
 	{
-		local_file.Write(data, dataSz);
+		local_file.Write(data, blockSz);
+		dataSz += blockSz;
 	}
+
+	chrono::steady_clock::time_point t2 = chrono::steady_clock::now();
+	chrono::duration<double> time_span = chrono::duration_cast<chrono::duration<double>>(t2 - t1);
+
 	local_file.Close();
 	close_data_sock();
 
 	// Lấy thử thông điệp cuối cùng -> Đã nhận "226 ...\r\n" thì thoát
 	if (getRelyCode(outputControlMsg.back().GetString()) == 226)
-		return TRUE;
+		goto printTransferSpeed;
 
 	// Nếu vẫn chưa nhận thông điệp "226 ...\r\n"
 	// -> Nhận cho đủ
@@ -812,6 +850,10 @@ BOOL FTPConnection::GetFile(const CString& remote_file_name, const CString& loca
 
 	if (getRelyCode(outputControlMsg.back().GetString()) != 226)
 		return FALSE;
+
+	printTransferSpeed:
+	sprintf_s(msg, "My ftp: %d bytes received in %.2f (s) %.2f (KB/s).\r\n", dataSz, time_span.count(), ((float)dataSz / 1024) / time_span.count()); 
+	outputControlMsg.push(CString(msg));
 	return TRUE;
 }
 
