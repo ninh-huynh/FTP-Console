@@ -8,6 +8,7 @@
 #include <vector>
 #include <map>
 #include <chrono>
+#include <mutex>
 
 #define MAX_MSG_BUF 255			//1461
 #define MAX_TRANSFER 4096
@@ -66,6 +67,7 @@ public:
 	BOOL PrintRemoteWorkingDir();
 	BOOL PutMultipleFiles(const vector<CString> &localFile);
 	void Help();
+	mutex m;
 };
 
 

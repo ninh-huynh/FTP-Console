@@ -407,7 +407,7 @@ BOOL FTPConnection::ListAllFile(const CString& remote_dir, const CString& local_
 	
 	close_data_sock();
 	// Lấy thử thông điệp cuối cùng -> Đã nhận "226 ...\r\n" thì thoát
-	if (getRelyCode(outputControlMsg.back().GetString()) == 226)
+	if (CString(msg).Find("226") != -1)
 		goto printTransferSpeed;
 
 	// nhận phản hồi từ server
@@ -433,9 +433,12 @@ BOOL FTPConnection::ListAllFile(const CString& remote_dir, const CString& local_
 
 BOOL FTPConnection::ListAllDirectory(const char * remote_dir, const char * local_file)
 {
+	unique_lock<mutex> guard(m, defer_lock);
 	char msg[MAX_MSG_BUF];
 	int msgSz;
-	
+
+	//============ Không cho phép truy cập outputControlMsg từ bên ngoài
+	guard.lock();
 	if (InitDataSock() == false)
 		return false;
 
@@ -448,6 +451,8 @@ BOOL FTPConnection::ListAllDirectory(const char * remote_dir, const char * local
 		serverIP.Format("%d.%d.%d.%d", A, B, C, D);
 		serverPort = 256 * a + b;
 	}
+	guard.unlock();
+	//============= Mở truy cập outputControlMsg
 
 	sprintf_s(msg, "LIST %s\r\n", remote_dir);
 	msgSz = strlen(msg);
@@ -520,7 +525,7 @@ BOOL FTPConnection::ListAllDirectory(const char * remote_dir, const char * local
 	close_data_sock();
 	
 	// Lấy thử thông điệp cuối cùng -> Đã nhận "226 ...\r\n" thì thoát
-	if (getRelyCode(outputControlMsg.back().GetString()) == 226)
+	if (CString(msg).Find("226") != -1)
 	{
 		sprintf_s(msg, "My ftp: %d bytes received in %.2f (s) %.2f (KB/s).\r\n", dataSz, time_span.count(), ((float)dataSz / 1024) / time_span.count());
 		outputControlMsg.push(CString(msg));
@@ -599,6 +604,8 @@ BOOL FTPConnection::CreateDir(const char * directory)
 
 BOOL FTPConnection::PutFile(const CString& localFile, const CString& remoteFile)
 {
+	unique_lock<mutex> guard(m, defer_lock);
+	// the mutex is not locked yet!
 	char msg[MAX_MSG_BUF];
 	int msgSz;
 
@@ -611,6 +618,8 @@ BOOL FTPConnection::PutFile(const CString& localFile, const CString& remoteFile)
 		return FALSE;
 	}
 
+	//============ Không cho phép truy cập outputControlMsg từ bên ngoài
+	guard.lock();
 	// Mở được file
 	if (InitDataSock() == false)
 		return false;
@@ -624,8 +633,8 @@ BOOL FTPConnection::PutFile(const CString& localFile, const CString& remoteFile)
 		serverIP.Format("%d.%d.%d.%d", A, B, C, D);
 		serverPort = 256 * a + b;
 	}
-
-
+	guard.unlock();
+	//============= Mở truy cập outputControlMsg
 	if (!remoteFile.IsEmpty())
 		sprintf_s(msg, "STOR %s\r\n", remoteFile.GetString());
 	else
@@ -708,7 +717,7 @@ BOOL FTPConnection::PutFile(const CString& localFile, const CString& remoteFile)
 	close_data_sock();
 	
 	// Lấy thử thông điệp cuối cùng -> Đã nhận "226 ...\r\n" thì thoát
-	if (getRelyCode(outputControlMsg.back().GetString()) == 226)
+	if (CString(msg).Find("226") != -1)
 	{
 		sprintf_s(msg, "My ftp: %d bytes sent in %.2f (s) %.2f (KB/s).\r\n", dataSz, time_span.count(), ((float)dataSz / 1024) / time_span.count());
 		outputControlMsg.push(CString(msg));
@@ -835,7 +844,7 @@ BOOL FTPConnection::GetFile(const CString& remote_file_name, const CString& loca
 	close_data_sock();
 
 	// Lấy thử thông điệp cuối cùng -> Đã nhận "226 ...\r\n" thì thoát
-	if (getRelyCode(outputControlMsg.back().GetString()) == 226)
+	if (CString(msg).Find("226") != -1)
 		goto printTransferSpeed;
 
 	// Nếu vẫn chưa nhận thông điệp "226 ...\r\n"
@@ -848,7 +857,7 @@ BOOL FTPConnection::GetFile(const CString& remote_file_name, const CString& loca
 	msg[msgSz] = '\0';
 	outputControlMsg.push(msg);
 
-	if (getRelyCode(outputControlMsg.back().GetString()) != 226)
+	if (getRelyCode(msg) != 226)
 		return FALSE;
 
 	printTransferSpeed:
@@ -890,8 +899,8 @@ BOOL FTPConnection::GetMultipleFiles(const vector<CString>& remote_file_names)
 	}
 
 	// clear outputControlMsg
-	decltype(outputControlMsg) dummy;
-	swap(outputControlMsg, dummy);
+	//decltype(outputControlMsg) dummy;
+	//swap(outputControlMsg, dummy);
 
 	// set chế độ truyền
 	SetMode(currentMode);
