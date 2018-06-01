@@ -897,7 +897,7 @@ BOOL FTPConnection::GetFile(const CString& remote_file_name, const CString& loca
 	}
 	else
 	{
-		if (!dataSock.Listen(1))
+		if (!dataSock.Listen())
 		{
 			sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
 			outputControlMsg.push(msg);
@@ -905,7 +905,13 @@ BOOL FTPConnection::GetFile(const CString& remote_file_name, const CString& loca
 			return FALSE;
 		}
 
-		dataSock.Accept(dataTrans);
+		if (!dataSock.Accept(dataTrans))
+		{
+			sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
+			outputControlMsg.push(msg);
+			dataSock.Close();
+			return FALSE;
+		}
 	}
 
 	// Trường hợp mà nhận đc cả hai thông điệp 150 ... \r\n và 226... \r\n
