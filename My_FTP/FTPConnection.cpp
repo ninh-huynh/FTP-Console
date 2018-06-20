@@ -67,7 +67,17 @@ BOOL FTPConnection::InitDataSock()
 	// gửi lệnh PASV/PORT
 	if (controlSock.Send(msg, strlen(msg), 0) == SOCKET_ERROR)
 	{
-		sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
+		if (controlSock.GetLastError() == WSAECONNABORTED)
+		{
+			strcpy_s(msg, "Connection closed by remote host\r\n");
+			controlSock.Close();
+			close_data_sock();
+			isConnected = FALSE;
+		}
+		else
+		{
+			sprintf_s(msg, "Error code: %d\n", controlSock.GetLastError());
+		}
 		outputControlMsg.push(msg);
 		return false;
 	}
@@ -84,7 +94,13 @@ BOOL FTPConnection::InitDataSock()
 	outputControlMsg.push(msg);
 	// kiểm tra code từ phản hồi của server
 	if (getRelyCode(msg) != (isPassive ? 227 : 200))		// "227 Entering Passive Mode (h1,h2,h3,h4,p1,p2)", "200 PORT command successful"
+	{
+		if (getRelyCode(msg) == 421)
+			isConnected = FALSE;
+		close_data_sock();
+		controlSock.Close();
 		return false;
+	}
 
 	// lưu data port của server ở chế độ PASSIVE
 	if (isPassive)

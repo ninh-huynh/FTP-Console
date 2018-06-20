@@ -18,6 +18,7 @@ using namespace std;
 extern mutex theLock;
 extern bool ready;
 extern condition_variable cv;
+extern BOOL isConnected;
 
 class FTPConnection
 {
